@@ -89,9 +89,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         client = _get_client()
         content = structured.render()
         result = client.send_message(content, display_name=DISPLAY_NAME_GITHUB)
-        return WebhookResponse(
-            ok=True, message_id=result.get("id"), detail="Message sent"
-        )
+        return WebhookResponse(ok=True, message_id=result.get("id"), detail="Message sent")
 
     # ------------------------------------------------------------------
     # Generic webhook
@@ -115,8 +113,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         client = _get_client()
         content = structured.render()
         result = client.send_message(content, display_name=DISPLAY_NAME_GENERIC)
-        return WebhookResponse(
-            ok=True, message_id=result.get("id"), detail="Message sent"
-        )
+        return WebhookResponse(ok=True, message_id=result.get("id"), detail="Message sent")
 
     return app

@@ -96,9 +96,7 @@ class TestGitHubEndpoint:
 
     def test_ignored_event(self, client):
         tc, mock = client
-        body = json.dumps(
-            {"action": "started", "repository": {"full_name": "org/repo"}}
-        ).encode()
+        body = json.dumps({"action": "started", "repository": {"full_name": "org/repo"}}).encode()
         resp = tc.post(
             "/webhooks/github",
             content=body,
@@ -173,9 +171,7 @@ class TestGenericEndpoint:
 
     def test_unauthorized(self, client):
         tc, _ = client
-        body = json.dumps(
-            {"event_type": "alert", "source": "x", "title": "y"}
-        ).encode()
+        body = json.dumps({"event_type": "alert", "source": "x", "title": "y"}).encode()
         resp = tc.post(
             "/webhooks/generic",
             content=body,

@@ -14,11 +14,14 @@ def verify_github_signature(signature_header: str, body: bytes, secret: str) -> 
     if not signature_header or not secret:
         return False
 
-    expected = "sha256=" + hmac.new(
-        secret.encode(),
-        body,
-        hashlib.sha256,
-    ).hexdigest()
+    expected = (
+        "sha256="
+        + hmac.new(
+            secret.encode(),
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+    )
 
     return hmac.compare_digest(signature_header, expected)
 
