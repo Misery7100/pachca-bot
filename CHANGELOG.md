@@ -23,6 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ...
 
+## [0.1.3] - 2026-03-15
+
+### Changed
+
+- **GitHub event handling** — Only published releases and completed workflow runs are now processed; release link displayed before pre-release indicator in `GitHubReleaseMessage`; improved user link handling for bots
+- **Deployment messages** — Environment included in deployment URL when specified
+- **Webhook payload** — `_GitHubRelease` model refactored to include `action` field
+
+### Removed
+
+- **README** — Corrected GitHub Actions references
+
 ## [0.1.2] - 2026-03-15
 
 ### Added
