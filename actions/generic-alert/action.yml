@@ -1,0 +1,60 @@
+name: "Pachca Alert"
+description: "Send an alert notification to Pachca via the generic webhook"
+
+inputs:
+  host:
+    description: "Bot host URL (e.g. https://pachca-bot.example.com)"
+    required: true
+  secret:
+    description: "Generic webhook secret (Bearer token)"
+    required: true
+  title:
+    description: "Alert title"
+    required: true
+  source:
+    description: "Source system identifier"
+    required: true
+  severity:
+    description: "Severity level: info, success, warning, error, critical"
+    required: false
+    default: "info"
+  details:
+    description: "Extended description text"
+    required: false
+    default: ""
+  fields:
+    description: 'JSON object of key-value fields (e.g. {"Host": "vm-01", "Service": "api"})'
+    required: false
+    default: "{}"
+  url:
+    description: "Link for more details"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Send alert to Pachca
+      shell: bash
+      run: |
+        curl -sf -X POST "${{ inputs.host }}/webhooks/generic" \
+          -H "Authorization: Bearer ${{ inputs.secret }}" \
+          -H "Content-Type: application/json" \
+          -d "$(jq -n \
+            --arg event_type "alert" \
+            --arg source "${{ inputs.source }}" \
+            --arg title "${{ inputs.title }}" \
+            --arg severity "${{ inputs.severity }}" \
+            --arg details "${{ inputs.details }}" \
+            --argjson fields '${{ inputs.fields }}' \
+            --arg url "${{ inputs.url }}" \
+            '{
+              event_type: $event_type,
+              source: $source,
+              title: $title,
+              severity: $severity,
+              details: $details,
+              fields: $fields,
+              url: $url
+            }'
+          )"

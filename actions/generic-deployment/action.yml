@@ -1,0 +1,72 @@
+name: "Pachca Deployment"
+description: "Send a deployment notification to Pachca via the generic webhook"
+
+inputs:
+  host:
+    description: "Bot host URL (e.g. https://pachca-bot.example.com)"
+    required: true
+  secret:
+    description: "Generic webhook secret (Bearer token)"
+    required: true
+  source:
+    description: "Service or app name being deployed"
+    required: true
+  environment:
+    description: "Target environment (e.g. production, staging)"
+    required: true
+  version:
+    description: "Version being deployed"
+    required: true
+  status:
+    description: "Deploy status: started, succeeded, failed, rolled_back"
+    required: true
+  deploy_id:
+    description: "Unique deploy identifier for thread-based status tracking"
+    required: false
+    default: ""
+  actor:
+    description: "Who triggered the deployment"
+    required: false
+    default: ""
+  changelog:
+    description: 'JSON array of change descriptions (e.g. ["Added caching", "Fixed bug"])'
+    required: false
+    default: "[]"
+  url:
+    description: "Link to deployment details"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Send deployment notification to Pachca
+      shell: bash
+      run: |
+        curl -sf -X POST "${{ inputs.host }}/webhooks/generic" \
+          -H "Authorization: Bearer ${{ inputs.secret }}" \
+          -H "Content-Type: application/json" \
+          -d "$(jq -n \
+            --arg event_type "deploy" \
+            --arg source "${{ inputs.source }}" \
+            --arg title "" \
+            --arg environment "${{ inputs.environment }}" \
+            --arg version "${{ inputs.version }}" \
+            --arg status "${{ inputs.status }}" \
+            --arg deploy_id "${{ inputs.deploy_id }}" \
+            --arg actor "${{ inputs.actor }}" \
+            --argjson changelog '${{ inputs.changelog }}' \
+            --arg url "${{ inputs.url }}" \
+            '{
+              event_type: $event_type,
+              source: $source,
+              title: $title,
+              environment: $environment,
+              version: $version,
+              status: $status,
+              deploy_id: $deploy_id,
+              actor: $actor,
+              changelog: $changelog,
+              url: $url
+            }'
+          )"
