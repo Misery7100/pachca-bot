@@ -222,6 +222,56 @@ curl -X POST https://your-bot-host/webhooks/generic \
 
 ---
 
+## Reusable GitHub Actions
+
+Pre-built composite actions in `actions/` for easy integration in any workflow.
+
+### Alert Action
+
+```yaml
+- uses: Misery7100/pachca-github-bot/actions/generic-alert@main
+  with:
+    host: ${{ secrets.PACHCA_BOT_HOST }}
+    secret: ${{ secrets.PACHCA_WEBHOOK_SECRET }}
+    source: "my-service"
+    title: "Build failed"
+    severity: "error"
+    details: "Build failed on commit ${{ github.sha }}"
+    fields: '{"Branch": "${{ github.ref_name }}", "Actor": "${{ github.actor }}"}'
+    url: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+```
+
+### Deployment Action
+
+```yaml
+# At the start of deploy
+- uses: Misery7100/pachca-github-bot/actions/generic-deployment@main
+  with:
+    host: ${{ secrets.PACHCA_BOT_HOST }}
+    secret: ${{ secrets.PACHCA_WEBHOOK_SECRET }}
+    source: "my-service"
+    environment: "production"
+    version: "1.2.3"
+    status: "started"
+    deploy_id: "deploy-${{ github.run_id }}"
+    actor: "${{ github.actor }}"
+    changelog: '["Added feature X", "Fixed bug Y"]'
+
+# After deploy completes
+- uses: Misery7100/pachca-github-bot/actions/generic-deployment@main
+  if: success()
+  with:
+    host: ${{ secrets.PACHCA_BOT_HOST }}
+    secret: ${{ secrets.PACHCA_WEBHOOK_SECRET }}
+    source: "my-service"
+    environment: "production"
+    version: "1.2.3"
+    status: "succeeded"
+    deploy_id: "deploy-${{ github.run_id }}"
+```
+
+---
+
 ## Development
 
 ```bash
