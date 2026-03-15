@@ -1,2 +1,1 @@
-# pachca-github-bot
-Pachca GitHub Integration
+# Pachca GitHub Integration
