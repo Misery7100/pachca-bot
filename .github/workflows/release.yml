@@ -1,23 +1,29 @@
-name: Build and Push
+name: Release a new version
 
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  ci:
+    name: Run CI before release
+    uses: ./.github/workflows/ci.yml
+    
   build-and-push:
+    needs: ci
+    name: Build and push Docker image
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
@@ -42,5 +48,30 @@ jobs:
         with:
           context: .
           push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  github-release:
+    needs: build-and-push
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Changelog Entry
+        id: changelog
+        uses: mindsers/changelog-reader-action@v2.2.3
+        with:
+          version: ${{ github.ref_name }}
+          path: ./CHANGELOG.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2.5.0
+        with:
+          body: |
+            ## Changelog
+
+            ${{ steps.changelog.outputs.changes }}
