@@ -1,36 +1,35 @@
 # Pachca Integration Bot
 
-A webhook-based integration bot that forwards notifications from GitHub and custom systems to [Pachca](https://pachca.com) channels.
+A webhook-based integration bot that forwards notifications from GitHub and custom systems to [Pachca](https://pachca.com) channels with rich, hyperlinked markdown formatting.
 
 ## Features
 
-- **GitHub Webhooks** — releases, failed CI checks/workflows, pull requests
+- **GitHub Webhooks** — releases, failed CI checks/workflows, pull requests (full lifecycle with threads), deployments
+- **Thread-based PR Tracking** — each PR gets one parent message; status changes are posted as thread replies and the parent is updated
 - **Generic Webhooks** — alert / deploy / custom events from any system (VMs, monitoring, CI)
-- **Structured Messages** — composable Pydantic models that render to Pachca markdown
+- **Structured Messages** — composable Pydantic models that render to Pachca markdown with hyperlinks
 - **Security** — HMAC-SHA256 verification for GitHub, Bearer token auth for generic endpoint
 
 ## Quick Start
 
 ```bash
 uv sync
-```
-
-Set required environment variables:
-
-```bash
-export PACHCA_ACCESS_TOKEN="your-pachca-bot-token"
-export PACHCA_CHAT_ID="12345"                       # target chat/channel ID
-
-# Optional security (recommended for production)
-export GITHUB_WEBHOOK_SECRET="your-github-secret"   # GitHub webhook HMAC secret
-export GENERIC_WEBHOOK_SECRET="your-bearer-token"   # Bearer token for generic endpoint
-```
-
-Run the server:
-
-```bash
 uv run python -m pachca_bot
 ```
+
+## Configuration
+
+All settings are read from environment variables:
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `PACHCA_ACCESS_TOKEN` | yes | — | Pachca API bot token |
+| `PACHCA_CHAT_ID` | yes | — | Target chat/channel ID |
+| `GITHUB_WEBHOOK_SECRET` | no | `""` | GitHub HMAC secret (skips verification if empty) |
+| `GENERIC_WEBHOOK_SECRET` | no | `""` | Bearer token for generic endpoint (skips auth if empty) |
+| `BOT_DISPLAY_AVATAR_URL` | no | — | Avatar URL for bot messages |
+| `HOST` | no | `0.0.0.0` | Server bind address |
+| `PORT` | no | `8000` | Server bind port |
 
 ## Endpoints
 
@@ -40,47 +39,139 @@ uv run python -m pachca_bot
 | `/webhooks/github` | POST | HMAC-SHA256 (`X-Hub-Signature-256`) | GitHub webhook receiver |
 | `/webhooks/generic` | POST | Bearer token (`Authorization`) | Generic webhook receiver |
 
-## GitHub Webhook Setup
+---
 
-1. In your GitHub repository → Settings → Webhooks → Add webhook
-2. **Payload URL**: `https://your-host/webhooks/github`
-3. **Content type**: `application/json`
-4. **Secret**: same value as `GITHUB_WEBHOOK_SECRET`
-5. **Events**: select *Releases*, *Check runs*, *Workflow runs*, *Pull requests*
+## GitHub Integration Setup
 
-## Generic Webhook
+### Step 1: Deploy the bot
 
-Send structured JSON to `/webhooks/generic` with a Bearer token:
+Deploy the bot somewhere publicly accessible (e.g. a VPS, cloud VM, or container platform). The bot listens on port `8000` by default.
 
 ```bash
-# Alert
-curl -X POST https://your-host/webhooks/generic \
-  -H "Authorization: Bearer $GENERIC_WEBHOOK_SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "event_type": "alert",
-    "source": "vm-prod-01",
-    "title": "Disk usage critical",
-    "severity": "error",
-    "details": "95% used on /data",
-    "fields": {"Host": "vm-prod-01", "Partition": "/data"},
-    "url": "https://monitoring.example.com/alert/123"
-  }'
+# Using Docker
+docker build -t pachca-bot .
+docker run -d --name pachca-bot -p 8000:8000 \
+    -e PACHCA_ACCESS_TOKEN="your-pachca-bot-token" \
+    -e PACHCA_CHAT_ID="your-chat-id" \
+    -e GITHUB_WEBHOOK_SECRET="your-secret-here" \
+    pachca-bot
+```
 
-# Deploy
-curl -X POST https://your-host/webhooks/generic \
-  -H "Authorization: Bearer $GENERIC_WEBHOOK_SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "event_type": "deploy",
-    "source": "api-service",
-    "title": "",
-    "environment": "production",
-    "version": "2.5.0",
-    "status": "succeeded",
-    "actor": "deployer",
-    "changelog": ["Added caching", "Fixed login bug"]
-  }'
+### Step 2: Generate a webhook secret
+
+Generate a random secret string. This will be shared between GitHub and the bot to verify webhook authenticity.
+
+```bash
+openssl rand -hex 32
+```
+
+Set this as the `GITHUB_WEBHOOK_SECRET` environment variable for the bot.
+
+### Step 3: Configure the GitHub webhook
+
+1. Go to your GitHub repository → **Settings** → **Webhooks** → **Add webhook**
+2. Fill in the fields:
+   - **Payload URL**: `https://your-bot-host/webhooks/github`
+   - **Content type**: `application/json`
+   - **Secret**: paste the secret from Step 2
+3. Under **"Which events would you like to trigger this webhook?"**, select **"Let me select individual events"** and check:
+   - ✅ **Check suites** — for PR check status tracking (marks PRs as "Ready to merge")
+   - ✅ **Deployments** — for deployment notifications
+   - ✅ **Deployment statuses** — for deployment status updates
+   - ✅ **Pull requests** — for PR lifecycle (draft, opened, ready for review, merged, closed)
+   - ✅ **Releases** — for release notifications
+   - ✅ **Workflow runs** — for CI failure notifications
+4. Optionally also check:
+   - ✅ **Check runs** — for individual check run failure notifications
+5. Make sure **Active** is checked
+6. Click **Add webhook**
+
+GitHub will send a `ping` event to verify the webhook is working. You should see a confirmation message in your Pachca channel.
+
+### Supported GitHub Events
+
+| Event | Actions | What it does |
+|---|---|---|
+| `release` | `published` | Posts release notification with changelog |
+| `pull_request` | `opened`, `closed`, `reopened`, `ready_for_review`, `converted_to_draft` | Creates/updates PR message with thread-based status tracking |
+| `check_suite` | `completed` (success) | Marks associated PRs as "Ready to merge" |
+| `workflow_run` | `completed` (failure/cancelled) | Posts CI failure notification |
+| `check_run` | `completed` (failure) | Posts individual check failure notification |
+| `deployment` | `created` | Posts deployment notification |
+| `deployment_status` | `created` | Posts deployment status update |
+
+### PR Lifecycle
+
+The bot tracks pull requests through their full lifecycle using **thread-based messaging**:
+
+| Status | Emoji | Trigger |
+|---|---|---|
+| Draft | 📝 | PR opened with `draft: true` |
+| Open | 🆕 | PR opened (non-draft) or reopened |
+| Ready for review | 👀 | PR marked as ready for review |
+| Ready to merge | ✅ | All check suites passed |
+| Merged | 🟣 | PR closed with `merged: true` |
+| Closed | 🚫 | PR closed without merge |
+
+**How it works:**
+1. When a new PR is created (draft or regular), the bot posts a parent message to the channel
+2. On each subsequent status change, the bot:
+   - Creates a thread on the parent message (if not already created)
+   - Posts a status transition reply in the thread (e.g. "📝 Draft → 🆕 Open")
+   - Updates the parent message content to reflect the new status
+3. If the parent message was deleted, the bot creates a new one on the next update
+
+---
+
+## Generic Integration Setup
+
+The generic webhook endpoint accepts structured JSON payloads from any system. It uses Bearer token authentication.
+
+### Step 1: Generate a secret
+
+```bash
+openssl rand -hex 32
+```
+
+Set this as the `GENERIC_WEBHOOK_SECRET` environment variable for the bot.
+
+### Step 2: Send webhooks
+
+Include the secret as a Bearer token in the `Authorization` header.
+
+#### Alert events
+
+```bash
+curl -X POST https://your-bot-host/webhooks/generic \
+    -H "Authorization: Bearer YOUR_SECRET" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "event_type": "alert",
+        "source": "vm-prod-01",
+        "title": "Disk usage critical",
+        "severity": "error",
+        "details": "95% used on /data partition",
+        "fields": {"Host": "vm-prod-01", "Partition": "/data"},
+        "url": "https://monitoring.example.com/alert/123"
+    }'
+```
+
+#### Deploy events
+
+```bash
+curl -X POST https://your-bot-host/webhooks/generic \
+    -H "Authorization: Bearer YOUR_SECRET" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "event_type": "deploy",
+        "source": "api-service",
+        "title": "",
+        "environment": "production",
+        "version": "2.5.0",
+        "status": "succeeded",
+        "actor": "deployer",
+        "changelog": ["Added caching", "Fixed login bug"]
+    }'
 ```
 
 ### Generic Payload Schema
@@ -100,44 +191,38 @@ curl -X POST https://your-host/webhooks/generic \
 | `actor` | string | no | Who triggered the event |
 | `changelog` | string[] | no | For deploys: list of changes |
 
-## Message Models
+### Severity Levels
 
-Build custom messages programmatically using composable blocks:
+| Severity | Emoji | Use case |
+|---|---|---|
+| `info` | ℹ️ | Informational events (backups, scheduled tasks) |
+| `success` | ✅ | Health checks passing, successful operations |
+| `warning` | ⚠️ | High resource usage, degraded performance |
+| `error` | ❌ | Service errors, failed operations |
+| `critical` | 🔥 | System down, data loss, immediate action needed |
 
-```python
-from pachca_bot.models.messages import (
-    StructuredMessage, HeaderBlock, FieldsBlock,
-    TextBlock, CodeBlock, LinkBlock, ListBlock,
-)
+---
 
-msg = StructuredMessage()
-msg.add(HeaderBlock(text="Deployment Report", level=2))
-msg.add(FieldsBlock(fields={"Env": "prod", "Version": "1.2.3"}))
-msg.add(ListBlock(items=["Fixed auth", "Added cache"]))
-msg.add(LinkBlock(text="View details", url="https://example.com"))
-
-print(msg.render())  # markdown ready for Pachca
-```
-
-## Testing
+## Development
 
 ```bash
-uv run pytest tests/ -v
-uv run ruff check src/ tests/
+uv sync
+just check     # lint + test
+just run       # start server
+just format    # auto-format
 ```
 
-## Configuration
+### Testing
 
-All settings are read from environment variables:
+```bash
+just test            # run all tests
+just lint            # lint check
+uv run pytest -v -k "test_pr"  # run specific tests
+```
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `PACHCA_ACCESS_TOKEN` | yes | — | Pachca API bot token |
-| `PACHCA_CHAT_ID` | yes | — | Target chat/channel ID |
-| `PACHCA_BOT_USER_ID` | no | — | Bot user ID (informational) |
-| `GITHUB_WEBHOOK_SECRET` | no | `""` | GitHub HMAC secret (skips verification if empty) |
-| `GENERIC_WEBHOOK_SECRET` | no | `""` | Bearer token (skips auth if empty) |
-| `BOT_DISPLAY_NAME` | no | `"Integration Bot"` | Display name for bot messages |
-| `BOT_DISPLAY_AVATAR_URL` | no | — | Avatar URL for bot messages |
-| `HOST` | no | `0.0.0.0` | Server bind address |
-| `PORT` | no | `8000` | Server bind port |
+### Docker
+
+```bash
+just docker-build
+just docker-run
+```
