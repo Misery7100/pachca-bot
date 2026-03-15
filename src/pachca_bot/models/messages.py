@@ -14,9 +14,9 @@ from pydantic import BaseModel, Field
 
 GITHUB_BASE = "https://github.com"
 
-# Matches the leading emoji (any single emoji cluster) at the start of a ## header
 _HEADER_EMOJI_RE = re.compile(r"^(## )\S+( )", re.MULTILINE)
 _STATUS_FIELD_RE = re.compile(r"^\*\*Status:\*\* .+$", re.MULTILINE)
+_MD_HEADING_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
 
 
 def _gh_user_link(login: str) -> str:
@@ -43,6 +43,11 @@ def _gh_pr_link(repo: str, number: int) -> str:
     return f"[#{number}]({GITHUB_BASE}/{repo}/pull/{number})"
 
 
+def _strip_md_headings(text: str) -> str:
+    """Remove markdown heading markers (# ## ###) from text."""
+    return _MD_HEADING_RE.sub("", text)
+
+
 class Severity(str, Enum):
     INFO = "info"
     SUCCESS = "success"
@@ -64,6 +69,7 @@ class Severity(str, Enum):
 class PRStatus(str, Enum):
     DRAFT = "draft"
     OPEN = "open"
+    REOPENED = "reopened"
     READY_FOR_REVIEW = "ready_for_review"
     CHECKS_PASSED = "checks_passed"
     MERGED = "merged"
@@ -74,6 +80,7 @@ class PRStatus(str, Enum):
         return {
             PRStatus.DRAFT: "📝",
             PRStatus.OPEN: "🆕",
+            PRStatus.REOPENED: "🔄",
             PRStatus.READY_FOR_REVIEW: "👀",
             PRStatus.CHECKS_PASSED: "✅",
             PRStatus.MERGED: "🟣",
@@ -85,6 +92,7 @@ class PRStatus(str, Enum):
         return {
             PRStatus.DRAFT: "Draft",
             PRStatus.OPEN: "Open",
+            PRStatus.REOPENED: "Reopened",
             PRStatus.READY_FOR_REVIEW: "Ready for review",
             PRStatus.CHECKS_PASSED: "Ready to merge",
             PRStatus.MERGED: "Merged",
@@ -112,14 +120,40 @@ class DeployStatus(str, Enum):
         return self.value.replace("_", " ").title()
 
 
+class GHDeployState(str, Enum):
+    CREATED = "created"
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    QUEUED = "queued"
+    SUCCESS = "success"
+    FAILURE = "failure"
+    ERROR = "error"
+    INACTIVE = "inactive"
+
+    @property
+    def emoji(self) -> str:
+        return {
+            GHDeployState.CREATED: "🚀",
+            GHDeployState.PENDING: "⏳",
+            GHDeployState.IN_PROGRESS: "🔄",
+            GHDeployState.QUEUED: "📋",
+            GHDeployState.SUCCESS: "✅",
+            GHDeployState.FAILURE: "❌",
+            GHDeployState.ERROR: "❌",
+            GHDeployState.INACTIVE: "💤",
+        }[self]
+
+    @property
+    def label(self) -> str:
+        return self.value.replace("_", " ").title()
+
+
 # ---------------------------------------------------------------------------
 # Block primitives
 # ---------------------------------------------------------------------------
 
 
 class MessageBlock(BaseModel):
-    """Base block — every block can render itself to markdown."""
-
     def render(self) -> str:
         raise NotImplementedError
 
@@ -212,8 +246,17 @@ class StructuredMessage(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def render_status_update(before_label: str, after_label: str) -> str:
-    return f"Status updated:\n\n**Before:** {before_label}\n**After:** {after_label}"
+def render_status_update(
+    before_emoji: str,
+    before_label: str,
+    after_emoji: str,
+    after_label: str,
+) -> str:
+    return (
+        f"Status updated:\n\n"
+        f"**Before:** {before_emoji} {before_label}\n"
+        f"**After:** {after_emoji} {after_label}"
+    )
 
 
 def patch_status_in_content(content: str, new_emoji: str, new_label: str) -> str:
@@ -253,7 +296,8 @@ class GitHubReleaseMessage(BaseModel):
             )
         )
         if self.body:
-            msg.add(TextBlock(text=self.body[:1000]))
+            cleaned = _strip_md_headings(self.body.strip())
+            msg.add(TextBlock(text=cleaned[:1000]))
         msg.add(LinkBlock(text="View release", url=self.url))
         return msg
 
@@ -315,7 +359,12 @@ class GitHubPRMessage(BaseModel):
 
     def to_thread_update(self, old_status: PRStatus | None = None) -> str:
         if old_status:
-            return render_status_update(old_status.label, self.status.label)
+            return render_status_update(
+                old_status.emoji,
+                old_status.label,
+                self.status.emoji,
+                self.status.label,
+            )
         return f"{self.status.emoji} {self.status.label}"
 
     @staticmethod
@@ -324,6 +373,8 @@ class GitHubPRMessage(BaseModel):
 
 
 class GitHubDeploymentMessage(BaseModel):
+    """GitHub deployment — supports thread-based tracking."""
+
     repo: str
     environment: str
     description: str = ""
@@ -333,19 +384,15 @@ class GitHubDeploymentMessage(BaseModel):
     ref: str = ""
     url: str = ""
 
-    def to_structured(self) -> StructuredMessage:
-        state_emoji = {
-            "success": "✅",
-            "failure": "❌",
-            "error": "❌",
-            "pending": "⏳",
-            "in_progress": "🔄",
-            "queued": "📋",
-            "inactive": "💤",
-        }
-        emoji = state_emoji.get(self.state, "🚀")
-        state_label = self.state or "created"
-        header = f"{emoji} Deployment: {self.environment}"
+    def _resolve_state(self) -> GHDeployState:
+        try:
+            return GHDeployState(self.state)
+        except ValueError:
+            return GHDeployState.CREATED
+
+    def to_parent(self) -> str:
+        ds = self._resolve_state()
+        header = f"{ds.emoji} Deployment: {self.environment}"
 
         msg = StructuredMessage()
         msg.add(HeaderBlock(text=header, level=2))
@@ -359,13 +406,26 @@ class GitHubDeploymentMessage(BaseModel):
             fields["Commit"] = _gh_commit_link(self.repo, self.sha)
         if self.creator:
             fields["Deployed by"] = _gh_user_link(self.creator)
-        fields["Status"] = state_label
+        fields["Status"] = ds.label
         msg.add(FieldsBlock(fields=fields))
         if self.description:
             msg.add(TextBlock(text=self.description))
         if self.url:
             msg.add(LinkBlock(text="View deployment", url=self.url))
-        return msg
+        return msg.render()
+
+    def to_thread_update(self, old_state: GHDeployState) -> str:
+        ds = self._resolve_state()
+        return render_status_update(
+            old_state.emoji,
+            old_state.label,
+            ds.emoji,
+            ds.label,
+        )
+
+    @staticmethod
+    def patch_parent_status(content: str, new_state: GHDeployState) -> str:
+        return patch_status_in_content(content, new_state.emoji, new_state.label)
 
 
 # ---------------------------------------------------------------------------
@@ -425,7 +485,12 @@ class GenericDeployMessage(BaseModel):
         return msg.render()
 
     def to_thread_update(self, old_status: DeployStatus) -> str:
-        return render_status_update(old_status.label, self.status.label)
+        return render_status_update(
+            old_status.emoji,
+            old_status.label,
+            self.status.emoji,
+            self.status.label,
+        )
 
     @staticmethod
     def patch_parent_status(content: str, new_status: DeployStatus) -> str:

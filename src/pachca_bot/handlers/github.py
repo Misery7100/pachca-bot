@@ -1,9 +1,4 @@
-"""GitHub webhook event handler.
-
-Translates GitHub webhook payloads into structured Pachca messages.
-Supports: releases, check_run / workflow_run (with PR thread routing),
-pull_request lifecycle, check_suite (for PR status), deployment events.
-"""
+"""GitHub webhook event handler."""
 
 from __future__ import annotations
 
@@ -27,6 +22,7 @@ from pachca_bot.models.messages import (
 from pachca_bot.models.webhooks import GitHubWebhookPayload
 
 if TYPE_CHECKING:
+    from pachca_bot.gh_deploy_tracker import GHDeployTracker
     from pachca_bot.pr_tracker import PRTracker
 
 logger = logging.getLogger(__name__)
@@ -43,7 +39,7 @@ SUPPORTED_EVENTS = {
 
 _PR_ACTIONS_TO_STATUS: dict[str, PRStatus | None] = {
     "opened": None,
-    "reopened": PRStatus.OPEN,
+    "reopened": PRStatus.REOPENED,
     "closed": None,
     "ready_for_review": PRStatus.READY_FOR_REVIEW,
     "converted_to_draft": PRStatus.DRAFT,
@@ -64,7 +60,6 @@ def _try_post_ci_to_pr_thread(
     pr_numbers: list[int],
     ci_msg: GitHubCIMessage,
 ) -> bool:
-    """Try to post a CI result into a PR thread. Returns True on success."""
     if not pr_tracker or not pr_numbers:
         return False
     for pr_num in pr_numbers:
@@ -84,8 +79,8 @@ def handle_github_event(
     event_type: str,
     payload: GitHubWebhookPayload,
     pr_tracker: PRTracker | None = None,
+    gh_deploy_tracker: GHDeployTracker | None = None,
 ) -> StructuredMessage | dict | None:
-    """Route a GitHub event to the appropriate message builder."""
     repo = payload.repository.full_name
 
     if event_type == "release" and payload.release is not None:
@@ -104,9 +99,7 @@ def handle_github_event(
         wr = payload.workflow_run
         if payload.action != "completed":
             return None
-        if wr.conclusion in (None, "neutral", "skipped"):
-            return None
-        if wr.conclusion == "success":
+        if wr.conclusion in (None, "success", "neutral", "skipped"):
             return None
 
         ci_msg = GitHubCIMessage(
@@ -199,7 +192,7 @@ def handle_github_event(
         if not url:
             url = f"{payload.repository.html_url}/deployments"
 
-        return GitHubDeploymentMessage(
+        deploy_msg = GitHubDeploymentMessage(
             repo=repo,
             environment=dep.environment or "unknown",
             description=description,
@@ -208,7 +201,11 @@ def handle_github_event(
             sha=dep.sha,
             ref=dep.ref,
             url=url,
-        ).to_structured()
+        )
+
+        if gh_deploy_tracker is not None:
+            return gh_deploy_tracker.handle_deploy_event(deploy_msg)
+        return StructuredMessage().add(TextBlock(text=deploy_msg.to_parent()))
 
     if event_type == "ping":
         repo_link = _gh_repo_link(repo)

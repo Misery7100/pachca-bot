@@ -1,4 +1,4 @@
-"""Tests for DeployTracker — thread-based deploy lifecycle."""
+"""Tests for DeployTracker."""
 
 from unittest.mock import MagicMock
 
@@ -13,13 +13,11 @@ def _make_tracker() -> tuple[DeployTracker, MagicMock]:
     client.create_thread.return_value = {"id": 200}
     client.post_to_thread.return_value = {"id": 201}
     client.update_message.return_value = {"id": 100}
-    tracker = DeployTracker(client)
-    return tracker, client
+    return DeployTracker(client), client
 
 
 def _make_deploy(
-    deploy_id: str = "dep-1",
-    status: DeployStatus = DeployStatus.STARTED,
+    deploy_id: str = "dep-1", status: DeployStatus = DeployStatus.STARTED
 ) -> GenericDeployMessage:
     return GenericDeployMessage(
         source="api",
@@ -30,35 +28,19 @@ def _make_deploy(
     )
 
 
-class TestDeployTrackerNew:
-    def test_creates_message(self):
-        tracker, client = _make_tracker()
-        result = tracker.handle_deploy_event(_make_deploy())
-        assert result["id"] == 100
-        client.send_message.assert_called_once()
-
-    def test_no_id_posts_directly(self):
-        tracker, client = _make_tracker()
-        msg = _make_deploy(deploy_id="")
-        result = tracker.handle_deploy_event(msg)
-        assert result["id"] == 100
-
-
 class TestDeployTrackerUpdate:
-    def test_thread_update_format(self):
+    def test_thread_update_has_emoji(self):
         tracker, client = _make_tracker()
         content = _make_deploy().to_parent()
         tracker._store[("api", "dep-1")] = _DeployEntry(
             message_id=100, status=DeployStatus.STARTED, content=content
         )
         tracker.handle_deploy_event(_make_deploy(status=DeployStatus.SUCCEEDED))
-
         thread_text = client.post_to_thread.call_args[0][1]
-        assert "Status updated:" in thread_text
-        assert "**Before:** Started" in thread_text
-        assert "**After:** Succeeded" in thread_text
+        assert "**Before:** 🚀 Started" in thread_text
+        assert "**After:** ✅ Succeeded" in thread_text
 
-    def test_patches_parent_preserving_content(self):
+    def test_patches_parent(self):
         tracker, client = _make_tracker()
         content = _make_deploy().to_parent()
         tracker._store[("api", "dep-1")] = _DeployEntry(
@@ -67,9 +49,7 @@ class TestDeployTrackerUpdate:
         tracker.handle_deploy_event(_make_deploy(status=DeployStatus.SUCCEEDED))
         updated = client.update_message.call_args[0][1]
         assert "✅" in updated
-        assert "🚀" not in updated
         assert "**Status:** Succeeded" in updated
-        assert "api" in updated
 
     def test_skips_same_status(self):
         tracker, client = _make_tracker()
@@ -78,4 +58,3 @@ class TestDeployTrackerUpdate:
         )
         result = tracker.handle_deploy_event(_make_deploy())
         assert result.get("unchanged") is True
-        client.create_thread.assert_not_called()

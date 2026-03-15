@@ -6,6 +6,7 @@ On each PR status change the tracker:
   2. Creates/gets the thread and posts a status-change reply
   3. Patches the parent message header/status (preserving body)
   4. If no parent message exists, creates a new one
+  5. REOPENED always creates a new parent message
 """
 
 from __future__ import annotations
@@ -59,12 +60,11 @@ class PRTracker:
     @staticmethod
     def _infer_status_from_content(content: str) -> PRStatus | None:
         for status in PRStatus:
-            if f"{status.emoji} {status.label}" in content:
+            if f"**Status:** {status.label}" in content:
                 return status
         return None
 
     def get_thread_id_for_pr(self, repo: str, number: int) -> int | None:
-        """Return the thread_id for a tracked PR, or None."""
         key = self._make_key(repo, number)
         entry = self._store.get(key)
         if entry is None:
@@ -75,8 +75,20 @@ class PRTracker:
         except Exception:
             return None
 
+    def _create_new(self, key: tuple[str, int], pr_msg: GitHubPRMessage) -> dict:
+        content = pr_msg.to_parent()
+        result = self._client.send_message(content, display_name=DISPLAY_NAME_GITHUB)
+        msg_id = result.get("id")
+        if msg_id:
+            self._store[key] = _PREntry(message_id=msg_id, status=pr_msg.status, content=content)
+        return result
+
     def handle_pr_event(self, pr_msg: GitHubPRMessage) -> dict:
         key = self._make_key(pr_msg.repo, pr_msg.number)
+
+        if pr_msg.status == PRStatus.REOPENED:
+            return self._create_new(key, pr_msg)
+
         entry = self._store.get(key)
 
         if entry is None:
@@ -86,14 +98,7 @@ class PRTracker:
                 self._store[key] = entry
 
         if entry is None:
-            content = pr_msg.to_parent()
-            result = self._client.send_message(content, display_name=DISPLAY_NAME_GITHUB)
-            msg_id = result.get("id")
-            if msg_id:
-                self._store[key] = _PREntry(
-                    message_id=msg_id, status=pr_msg.status, content=content
-                )
-            return result
+            return self._create_new(key, pr_msg)
 
         old_status = entry.status
         if old_status == pr_msg.status:
@@ -124,13 +129,6 @@ class PRTracker:
                 entry.message_id,
                 exc_info=True,
             )
-            new_content = pr_msg.to_parent()
-            result = self._client.send_message(new_content, display_name=DISPLAY_NAME_GITHUB)
-            msg_id = result.get("id")
-            if msg_id:
-                self._store[key] = _PREntry(
-                    message_id=msg_id, status=pr_msg.status, content=new_content
-                )
-            return result
+            return self._create_new(key, pr_msg)
 
         return {"id": entry.message_id}

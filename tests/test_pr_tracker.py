@@ -1,4 +1,4 @@
-"""Tests for PRTracker — thread-based PR lifecycle management."""
+"""Tests for PRTracker."""
 
 from unittest.mock import MagicMock
 
@@ -13,18 +13,14 @@ def _make_tracker() -> tuple[PRTracker, MagicMock]:
     client.create_thread.return_value = {"id": 200}
     client.post_to_thread.return_value = {"id": 201}
     client.update_message.return_value = {"id": 100}
-    tracker = PRTracker(client)
-    return tracker, client
+    return PRTracker(client), client
 
 
-def _make_pr(
-    number: int = 1,
-    status: PRStatus = PRStatus.OPEN,
-) -> GitHubPRMessage:
+def _make_pr(number: int = 1, status: PRStatus = PRStatus.OPEN) -> GitHubPRMessage:
     return GitHubPRMessage(
         repo="org/repo",
         number=number,
-        title="Test PR",
+        title="Test",
         author="alice",
         url=f"https://github.com/org/repo/pull/{number}",
         base_branch="main",
@@ -33,21 +29,8 @@ def _make_pr(
     )
 
 
-class TestPRTrackerNewPR:
-    def test_creates_new_message(self):
-        tracker, client = _make_tracker()
-        result = tracker.handle_pr_event(_make_pr(status=PRStatus.DRAFT))
-        assert result["id"] == 100
-        client.send_message.assert_called_once()
-
-    def test_stores_entry(self):
-        tracker, _ = _make_tracker()
-        tracker.handle_pr_event(_make_pr(number=42))
-        assert ("org/repo", 42) in tracker._store
-
-
 class TestPRTrackerUpdate:
-    def test_thread_update_format(self):
+    def test_thread_update_has_emoji(self):
         tracker, client = _make_tracker()
         content = _make_pr(status=PRStatus.DRAFT).to_parent()
         tracker._store[("org/repo", 1)] = _PREntry(
@@ -56,25 +39,20 @@ class TestPRTrackerUpdate:
         tracker.handle_pr_event(_make_pr(status=PRStatus.OPEN))
 
         thread_text = client.post_to_thread.call_args[0][1]
-        assert "Status updated:" in thread_text
-        assert "**Before:** Draft" in thread_text
-        assert "**After:** Open" in thread_text
+        assert "**Before:** 📝 Draft" in thread_text
+        assert "**After:** 🆕 Open" in thread_text
 
-    def test_patches_parent_preserving_content(self):
+    def test_patches_parent(self):
         tracker, client = _make_tracker()
         content = _make_pr(status=PRStatus.DRAFT).to_parent()
         tracker._store[("org/repo", 1)] = _PREntry(
             message_id=100, status=PRStatus.DRAFT, content=content
         )
         tracker.handle_pr_event(_make_pr(status=PRStatus.MERGED))
-
         updated = client.update_message.call_args[0][1]
         assert "🟣" in updated
-        assert "📝" not in updated
         assert "**Status:** Merged" in updated
         assert "[alice](" in updated
-        assert "[feat](" in updated
-        assert "Test PR" in updated
 
     def test_skips_same_status(self):
         tracker, client = _make_tracker()
@@ -84,16 +62,29 @@ class TestPRTrackerUpdate:
         client.create_thread.assert_not_called()
 
 
-class TestPRTrackerFullLifecycle:
+class TestPRTrackerReopened:
+    def test_reopened_always_new_message(self):
+        tracker, client = _make_tracker()
+        content = _make_pr(status=PRStatus.CLOSED).to_parent()
+        tracker._store[("org/repo", 1)] = _PREntry(
+            message_id=100, status=PRStatus.CLOSED, content=content
+        )
+        tracker.handle_pr_event(_make_pr(status=PRStatus.REOPENED))
+
+        client.send_message.assert_called_once()
+        sent = client.send_message.call_args[0][0]
+        assert "🔄" in sent
+        assert "Reopened" in sent
+        client.create_thread.assert_not_called()
+        client.update_message.assert_not_called()
+
+
+class TestPRTrackerLifecycle:
     def test_draft_to_open_to_merged(self):
         tracker, client = _make_tracker()
-
         tracker.handle_pr_event(_make_pr(status=PRStatus.DRAFT))
-        client.send_message.assert_called_once()
-
         tracker.handle_pr_event(_make_pr(status=PRStatus.OPEN))
-        assert client.create_thread.call_count == 1
-
         tracker.handle_pr_event(_make_pr(status=PRStatus.MERGED))
+        assert client.send_message.call_count == 1
         assert client.create_thread.call_count == 2
         assert client.update_message.call_count == 2

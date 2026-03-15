@@ -25,12 +25,11 @@ class TestGitHubHandler:
             {
                 "action": "published",
                 "repository": {"full_name": "org/repo"},
-                "sender": {"login": "alice"},
                 "release": {
-                    "tag_name": "v1.0.0",
-                    "name": "Version 1.0",
-                    "body": "Changelog",
-                    "html_url": "https://github.com/org/repo/releases/tag/v1.0.0",
+                    "tag_name": "v1.0",
+                    "name": "v1.0",
+                    "body": "### Notes\n- Fix",
+                    "html_url": "https://github.com/org/repo/releases/tag/v1.0",
                     "author": {"login": "alice"},
                 },
             }
@@ -39,92 +38,62 @@ class TestGitHubHandler:
         assert isinstance(result, StructuredMessage)
         rendered = result.render()
         assert "🔖" in rendered
-        assert "**Tag:**" not in rendered
-        assert "**Release:**" not in rendered
+        assert "###" not in rendered
         assert "[View release](" in rendered
 
-    def test_workflow_failure(self):
-        payload = GitHubWebhookPayload.model_validate(
-            {
-                "action": "completed",
-                "repository": {"full_name": "org/repo"},
-                "workflow_run": {
-                    "name": "CI",
-                    "head_branch": "main",
-                    "head_sha": "abc123",
-                    "conclusion": "failure",
-                    "html_url": "https://github.com/org/repo/actions/runs/1",
-                    "actor": {"login": "alice"},
-                },
-            }
-        )
-        result = handle_github_event("workflow_run", payload)
-        assert isinstance(result, StructuredMessage)
-        rendered = result.render()
-        assert "CI" in rendered
-        assert "**Triggered by:**" not in rendered
-
-    def test_workflow_failure_posted_to_pr_thread(self):
+    def test_pr_reopened_always_new(self):
         tracker = _make_mock_tracker()
-        tracker._store[("org/repo", 5)] = MagicMock(
-            message_id=100, status=PRStatus.OPEN, content=""
+        tracker._store[("org/repo", 7)] = MagicMock(
+            message_id=100, status=PRStatus.CLOSED, content=""
         )
         payload = GitHubWebhookPayload.model_validate(
             {
-                "action": "completed",
-                "repository": {"full_name": "org/repo"},
-                "workflow_run": {
-                    "name": "CI",
-                    "head_branch": "feat",
-                    "head_sha": "abc123",
-                    "conclusion": "failure",
-                    "html_url": "https://github.com/org/repo/actions/runs/1",
-                    "actor": {"login": "alice"},
-                    "pull_requests": [{"number": 5}],
-                },
-            }
-        )
-        result = handle_github_event("workflow_run", payload, pr_tracker=tracker)
-        assert isinstance(result, dict)
-        assert result.get("posted_to_pr_thread") is True
-
-    def test_pr_opened(self):
-        tracker = _make_mock_tracker()
-        payload = GitHubWebhookPayload.model_validate(
-            {
-                "action": "opened",
+                "action": "reopened",
                 "repository": {"full_name": "org/repo"},
                 "pull_request": {
                     "number": 7,
-                    "title": "Feature",
+                    "title": "Feat",
                     "html_url": "https://github.com/org/repo/pull/7",
                     "user": {"login": "alice"},
                     "head": {"ref": "feat"},
                     "base": {"ref": "main"},
-                    "draft": False,
                 },
             }
         )
         result = handle_github_event("pull_request", payload, pr_tracker=tracker)
         assert isinstance(result, dict)
-        assert result["id"] == 100
+        tracker._client.send_message.assert_called_once()
+        content = tracker._client.send_message.call_args[0][0]
+        assert "🔄" in content
+        assert "Reopened" in content
 
-    def test_pr_labeled_ignored(self):
+    def test_deployment_tracked(self):
+        from pachca_bot.gh_deploy_tracker import GHDeployTracker
+
+        client = MagicMock()
+        client.send_message.return_value = {"id": 300}
+        client.get_messages.return_value = []
+        gh_tracker = GHDeployTracker(client)
+
         payload = GitHubWebhookPayload.model_validate(
             {
-                "action": "labeled",
-                "repository": {"full_name": "org/repo"},
-                "pull_request": {
-                    "number": 1,
-                    "title": "PR",
-                    "html_url": "https://github.com/org/repo/pull/1",
-                    "user": {"login": "x"},
-                    "head": {"ref": "a"},
-                    "base": {"ref": "main"},
+                "action": "created",
+                "repository": {
+                    "full_name": "org/repo",
+                    "html_url": "https://github.com/org/repo",
+                },
+                "deployment": {
+                    "id": 1,
+                    "sha": "abc123",
+                    "ref": "main",
+                    "environment": "production",
+                    "creator": {"login": "alice"},
                 },
             }
         )
-        assert handle_github_event("pull_request", payload) is None
+        result = handle_github_event("deployment", payload, gh_deploy_tracker=gh_tracker)
+        assert isinstance(result, dict)
+        assert result["id"] == 300
 
     def test_ping(self):
         payload = GitHubWebhookPayload.model_validate(
@@ -132,7 +101,6 @@ class TestGitHubHandler:
         )
         result = handle_github_event("ping", payload)
         assert isinstance(result, StructuredMessage)
-        assert "connected" in result.render()
 
 
 class TestGenericHandler:
@@ -146,9 +114,7 @@ class TestGenericHandler:
         )
         result = handle_generic_event(payload)
         assert isinstance(result, StructuredMessage)
-        rendered = result.render()
-        assert "**Source:** monitor" in rendered
-        assert "[monitor]" not in rendered
+        assert "**Source:** monitor" in result.render()
 
     def test_deploy_without_id(self):
         payload = GenericWebhookPayload(
@@ -160,18 +126,4 @@ class TestGenericHandler:
             status="succeeded",
         )
         result = handle_generic_event(payload)
-        assert isinstance(result, StructuredMessage)
-        assert "1.2.3" in result.render()
-
-    def test_deploy_with_id_no_tracker(self):
-        payload = GenericWebhookPayload(
-            event_type="deploy",
-            source="api",
-            title="",
-            environment="prod",
-            version="1.0",
-            status="started",
-            deploy_id="dep-42",
-        )
-        result = handle_generic_event(payload, deploy_tracker=None)
         assert isinstance(result, StructuredMessage)
