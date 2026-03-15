@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ...
 
-## [0.1.0] - 2026-03-15
+## [v0.1.0] - 2026-03-15
 
 ### Added
 
@@ -49,4 +49,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Project scaffolding** — pyproject.toml (uv, FastAPI, pydantic, pachca), .gitignore, LICENSE (MIT), README with setup and usage docs
 
 [unreleased]: https://github.com/Misery7100/pachca-bot/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Misery7100/pachca-bot/releases/tag/v0.1.0
+[v0.1.0]: https://github.com/Misery7100/pachca-bot/releases/tag/v0.1.0
