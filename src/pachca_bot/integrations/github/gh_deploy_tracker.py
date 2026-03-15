@@ -1,6 +1,6 @@
 """Thread-based GitHub deployment tracking.
 
-Maintains an in-memory mapping of (repo, environment) → pachca_message_id.
+Maintains an in-memory mapping of (repo, environment, sha) → pachca_message_id.
 """
 
 from __future__ import annotations
@@ -28,28 +28,35 @@ class GHDeployTracker:
     def __init__(self, client: PachcaClient, integration: IntegrationConfig) -> None:
         self._client = client
         self._integration = integration
-        self._store: dict[tuple[str, str], _GHDeployEntry] = {}
+        self._store: dict[tuple[str, str, str], _GHDeployEntry] = {}
 
-    def _make_key(self, repo: str, environment: str) -> tuple[str, str]:
-        return (repo, environment)
+    def _make_key(self, repo: str, environment: str, sha: str) -> tuple[str, str, str]:
+        return (repo, environment, sha or "")
 
-    def _search_chat(self, environment: str) -> _GHDeployEntry | None:
+    def _search_chat(self, repo: str, environment: str, sha: str) -> _GHDeployEntry | None:
         try:
             messages = self._client.get_messages(self._integration.chat_id)
         except Exception:
             logger.warning("Failed to fetch messages for GH deploy lookup", exc_info=True)
             return None
 
-        target = f"Deployment: {environment}"
+        env_target = f"Deployment: {environment}"
+        short_sha = (sha or "")[:8]
+
         for msg in messages:
             content = msg.get("content", "")
-            if target in content:
-                state = self._infer_state(content)
-                return _GHDeployEntry(
-                    message_id=msg.get("id", 0),
-                    state=state,
-                    content=content,
-                )
+            if env_target not in content:
+                continue
+            if repo not in content:
+                continue
+            if short_sha and short_sha not in content:
+                continue
+            state = self._infer_state(content)
+            return _GHDeployEntry(
+                message_id=msg.get("id", 0),
+                state=state,
+                content=content,
+            )
         return None
 
     @staticmethod
@@ -60,11 +67,13 @@ class GHDeployTracker:
         return GHDeployState.CREATED
 
     def handle_deploy_event(self, deploy_msg: GitHubDeploymentMessage) -> dict:
-        key = self._make_key(deploy_msg.repo, deploy_msg.environment)
+        key = self._make_key(deploy_msg.repo, deploy_msg.environment, deploy_msg.sha)
         entry = self._store.get(key)
 
         if entry is None:
-            found = self._search_chat(deploy_msg.environment)
+            found = self._search_chat(
+                deploy_msg.repo, deploy_msg.environment, deploy_msg.sha
+            )
             if found is not None:
                 entry = found
                 self._store[key] = entry
