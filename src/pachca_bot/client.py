@@ -29,6 +29,7 @@ class PachcaClient:
     def send_message(
         self,
         content: str,
+        display_name: str = "",
         chat_id: int | None = None,
     ) -> dict:
         """Post a markdown message to the configured Pachca chat.
@@ -43,8 +44,8 @@ class PachcaClient:
             "content": content,
             "entity_type": "discussion",
         }
-        if self._settings.bot_display_name:
-            kwargs["display_name"] = self._settings.bot_display_name
+        if display_name:
+            kwargs["display_name"] = display_name
         if self._settings.bot_display_avatar_url:
             kwargs["display_avatar_url"] = self._settings.bot_display_avatar_url
 

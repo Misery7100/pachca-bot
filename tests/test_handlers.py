@@ -11,7 +11,10 @@ class TestGitHubHandler:
         payload = GitHubWebhookPayload.model_validate(
             {
                 "action": "published",
-                "repository": {"full_name": "org/repo", "html_url": "https://github.com/org/repo"},
+                "repository": {
+                    "full_name": "org/repo",
+                    "html_url": "https://github.com/org/repo",
+                },
                 "sender": {"login": "alice"},
                 "release": {
                     "tag_name": "v1.0.0",
@@ -27,7 +30,8 @@ class TestGitHubHandler:
         assert result is not None
         rendered = result.render()
         assert "v1.0.0" in rendered
-        assert "org/repo" in rendered
+        assert "[org/repo](" in rendered
+        assert "[alice](" in rendered
 
     def test_workflow_run_failure(self):
         payload = GitHubWebhookPayload.model_validate(
@@ -50,6 +54,7 @@ class TestGitHubHandler:
         rendered = result.render()
         assert "CI Pipeline" in rendered
         assert "failure" in rendered
+        assert "[alice](" in rendered
 
     def test_workflow_run_success_ignored(self):
         payload = GitHubWebhookPayload.model_validate(
@@ -129,6 +134,61 @@ class TestGitHubHandler:
         )
         assert handle_github_event("pull_request", payload) is None
 
+    def test_deployment_created(self):
+        payload = GitHubWebhookPayload.model_validate(
+            {
+                "action": "created",
+                "repository": {
+                    "full_name": "org/repo",
+                    "html_url": "https://github.com/org/repo",
+                },
+                "sender": {"login": "alice"},
+                "deployment": {
+                    "id": 1,
+                    "sha": "abc123def456",
+                    "ref": "main",
+                    "environment": "production",
+                    "description": "Deploying v1.0",
+                    "creator": {"login": "alice"},
+                },
+            }
+        )
+        result = handle_github_event("deployment", payload)
+        assert result is not None
+        rendered = result.render()
+        assert "production" in rendered
+        assert "[alice](" in rendered
+        assert "[main](" in rendered
+
+    def test_deployment_status_failure(self):
+        payload = GitHubWebhookPayload.model_validate(
+            {
+                "action": "created",
+                "repository": {
+                    "full_name": "org/repo",
+                    "html_url": "https://github.com/org/repo",
+                },
+                "sender": {"login": "bot"},
+                "deployment": {
+                    "id": 1,
+                    "sha": "abc123",
+                    "ref": "v2.0",
+                    "environment": "staging",
+                    "creator": {"login": "alice"},
+                },
+                "deployment_status": {
+                    "state": "failure",
+                    "description": "Deploy failed",
+                    "target_url": "https://github.com/org/repo/deployments/1",
+                },
+            }
+        )
+        result = handle_github_event("deployment_status", payload)
+        assert result is not None
+        rendered = result.render()
+        assert "failure" in rendered
+        assert "staging" in rendered
+
     def test_ping(self):
         payload = GitHubWebhookPayload.model_validate(
             {
@@ -138,7 +198,9 @@ class TestGitHubHandler:
         )
         result = handle_github_event("ping", payload)
         assert result is not None
-        assert "connected" in result.render()
+        rendered = result.render()
+        assert "connected" in rendered
+        assert "[org/repo](" in rendered
 
     def test_unsupported_event_ignored(self):
         payload = GitHubWebhookPayload.model_validate(

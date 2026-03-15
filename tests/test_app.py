@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from pachca_bot.app import create_app
+from pachca_bot.config import DISPLAY_NAME_GENERIC, DISPLAY_NAME_GITHUB
 
 
 @pytest.fixture()
@@ -77,6 +78,7 @@ class TestGitHubEndpoint:
         mock.send_message.assert_called_once()
         content = mock.send_message.call_args[0][0]
         assert "v1.0" in content
+        assert mock.send_message.call_args[1]["display_name"] == DISPLAY_NAME_GITHUB
 
     def test_invalid_signature(self, client):
         tc, _ = client
@@ -110,6 +112,40 @@ class TestGitHubEndpoint:
         assert resp.json()["detail"] == "Event ignored"
         mock.send_message.assert_not_called()
 
+    def test_deployment_webhook(self, client):
+        tc, mock = client
+        body = json.dumps(
+            {
+                "action": "created",
+                "repository": {
+                    "full_name": "org/repo",
+                    "html_url": "https://github.com/org/repo",
+                },
+                "sender": {"login": "alice"},
+                "deployment": {
+                    "id": 1,
+                    "sha": "abc123",
+                    "ref": "main",
+                    "environment": "production",
+                    "description": "Deploy v1",
+                    "creator": {"login": "alice"},
+                },
+            }
+        ).encode()
+        resp = tc.post(
+            "/webhooks/github",
+            content=body,
+            headers={
+                "X-Hub-Signature-256": _github_sig(body),
+                "X-GitHub-Event": "deployment",
+                "Content-Type": "application/json",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        content = mock.send_message.call_args[0][0]
+        assert "production" in content
+
 
 class TestGenericEndpoint:
     def test_alert(self, client):
@@ -133,6 +169,7 @@ class TestGenericEndpoint:
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
         mock.send_message.assert_called_once()
+        assert mock.send_message.call_args[1]["display_name"] == DISPLAY_NAME_GENERIC
 
     def test_unauthorized(self, client):
         tc, _ = client

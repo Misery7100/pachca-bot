@@ -1,5 +1,8 @@
 from pydantic_settings import BaseSettings
 
+DISPLAY_NAME_GITHUB = "GitHub"
+DISPLAY_NAME_GENERIC = "GitHub (generic)"
+
 
 class Settings(BaseSettings):
     pachca_access_token: str
@@ -9,7 +12,6 @@ class Settings(BaseSettings):
     github_webhook_secret: str = ""
     generic_webhook_secret: str = ""
 
-    bot_display_name: str = "Integration Bot"
     bot_display_avatar_url: str | None = None
 
     host: str = "0.0.0.0"

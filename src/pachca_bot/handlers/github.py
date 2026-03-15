@@ -1,7 +1,8 @@
 """GitHub webhook event handler.
 
 Translates GitHub webhook payloads into structured Pachca messages.
-Supports: releases, check_run / workflow_run failures, pull_request events.
+Supports: releases, check_run / workflow_run failures, pull_request events,
+deployment / deployment_status events.
 """
 
 from __future__ import annotations
@@ -11,18 +12,27 @@ import logging
 from pachca_bot.models.messages import (
     FieldsBlock,
     GitHubCheckFailureMessage,
+    GitHubDeploymentMessage,
     GitHubPullRequestMessage,
     GitHubReleaseMessage,
     HeaderBlock,
     Severity,
     StructuredMessage,
     TextBlock,
+    _gh_repo_link,
 )
 from pachca_bot.models.webhooks import GitHubWebhookPayload
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_EVENTS = {"release", "check_run", "workflow_run", "pull_request"}
+SUPPORTED_EVENTS = {
+    "release",
+    "check_run",
+    "workflow_run",
+    "pull_request",
+    "deployment",
+    "deployment_status",
+}
 
 _INTERESTING_PR_ACTIONS = {
     "opened",
@@ -105,10 +115,38 @@ def handle_github_event(
             draft=pr.draft,
         ).to_structured()
 
+    if event_type in ("deployment", "deployment_status") and payload.deployment is not None:
+        dep = payload.deployment
+        state = ""
+        url = ""
+        description = dep.description or ""
+
+        if payload.deployment_status is not None:
+            ds = payload.deployment_status
+            state = ds.state
+            url = ds.target_url or ds.log_url or ""
+            if ds.description:
+                description = ds.description
+
+        if not url:
+            url = f"{payload.repository.html_url}/deployments"
+
+        return GitHubDeploymentMessage(
+            repo=repo,
+            environment=dep.environment or "unknown",
+            description=description,
+            state=state,
+            creator=dep.creator.login or payload.sender.login,
+            sha=dep.sha,
+            ref=dep.ref,
+            url=url,
+        ).to_structured()
+
     if event_type == "ping":
+        repo_link = _gh_repo_link(repo)
         msg = StructuredMessage()
         msg.add(HeaderBlock(text=f"{Severity.INFO.emoji} GitHub webhook connected", level=2))
-        msg.add(FieldsBlock(fields={"Repository": repo}))
+        msg.add(FieldsBlock(fields={"Repository": repo_link}))
         msg.add(TextBlock(text="Webhook ping received successfully."))
         return msg
 

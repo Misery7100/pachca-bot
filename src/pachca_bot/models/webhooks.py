@@ -105,6 +105,22 @@ class _GitHubPR(BaseModel, extra="allow"):
     draft: bool = False
 
 
+class _GitHubDeployment(BaseModel, extra="allow"):
+    id: int = 0
+    sha: str = ""
+    ref: str = ""
+    environment: str = ""
+    description: str | None = ""
+    creator: _GitHubUser = Field(default_factory=_GitHubUser)
+
+
+class _GitHubDeploymentStatus(BaseModel, extra="allow"):
+    state: str = ""
+    description: str | None = ""
+    target_url: str | None = ""
+    log_url: str | None = ""
+
+
 class GitHubWebhookPayload(BaseModel, extra="allow"):
     """Top-level GitHub webhook payload — loosely typed to tolerate any event."""
 
@@ -117,6 +133,8 @@ class GitHubWebhookPayload(BaseModel, extra="allow"):
     workflow_run: _GitHubWorkflowRun | None = None
     check_run: _GitHubCheckRun | None = None
     pull_request: _GitHubPR | None = None
+    deployment: _GitHubDeployment | None = None
+    deployment_status: _GitHubDeploymentStatus | None = None
 
     raw: dict[str, Any] = Field(default_factory=dict, exclude=True)
 

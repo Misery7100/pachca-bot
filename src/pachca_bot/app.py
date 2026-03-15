@@ -9,7 +9,12 @@ from typing import AsyncIterator
 from fastapi import FastAPI, Header, HTTPException, Request
 
 from pachca_bot.client import PachcaClient
-from pachca_bot.config import Settings, get_settings
+from pachca_bot.config import (
+    DISPLAY_NAME_GENERIC,
+    DISPLAY_NAME_GITHUB,
+    Settings,
+    get_settings,
+)
 from pachca_bot.handlers.generic import handle_generic_event
 from pachca_bot.handlers.github import handle_github_event
 from pachca_bot.models.webhooks import (
@@ -83,8 +88,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         client = _get_client()
         content = structured.render()
-        result = client.send_message(content)
-        return WebhookResponse(ok=True, message_id=result.get("id"), detail="Message sent")
+        result = client.send_message(content, display_name=DISPLAY_NAME_GITHUB)
+        return WebhookResponse(
+            ok=True, message_id=result.get("id"), detail="Message sent"
+        )
 
     # ------------------------------------------------------------------
     # Generic webhook
@@ -107,7 +114,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         client = _get_client()
         content = structured.render()
-        result = client.send_message(content)
-        return WebhookResponse(ok=True, message_id=result.get("id"), detail="Message sent")
+        result = client.send_message(content, display_name=DISPLAY_NAME_GENERIC)
+        return WebhookResponse(
+            ok=True, message_id=result.get("id"), detail="Message sent"
+        )
 
     return app

@@ -7,6 +7,7 @@ from pachca_bot.models.messages import (
     GenericAlertMessage,
     GenericDeployMessage,
     GitHubCheckFailureMessage,
+    GitHubDeploymentMessage,
     GitHubPullRequestMessage,
     GitHubReleaseMessage,
     HeaderBlock,
@@ -73,7 +74,7 @@ class TestStructuredMessage:
 
 
 class TestTemplateMessages:
-    def test_release_message(self):
+    def test_release_message_has_hyperlinks(self):
         m = GitHubReleaseMessage(
             repo="org/repo",
             tag="v1.0.0",
@@ -83,9 +84,9 @@ class TestTemplateMessages:
             body="changelog here",
         )
         rendered = m.to_structured().render()
-        assert "v1.0.0" in rendered
-        assert "org/repo" in rendered
-        assert "alice" in rendered
+        assert "[v1.0.0](https://github.com/org/repo/releases/v1.0.0)" in rendered
+        assert "[org/repo](https://github.com/org/repo)" in rendered
+        assert "[alice](https://github.com/alice)" in rendered
         assert "changelog here" in rendered
 
     def test_prerelease_message(self):
@@ -100,7 +101,7 @@ class TestTemplateMessages:
         rendered = m.to_structured().render()
         assert "pre-release" in rendered
 
-    def test_check_failure_message(self):
+    def test_check_failure_has_hyperlinks(self):
         m = GitHubCheckFailureMessage(
             repo="org/repo",
             workflow_name="CI",
@@ -113,9 +114,11 @@ class TestTemplateMessages:
         rendered = m.to_structured().render()
         assert "CI" in rendered
         assert "failure" in rendered
-        assert "`abc12345`" in rendered
+        assert "[abc12345](https://github.com/org/repo/commit/abc12345678)" in rendered
+        assert "[main](https://github.com/org/repo/tree/main)" in rendered
+        assert "[alice](https://github.com/alice)" in rendered
 
-    def test_pr_opened(self):
+    def test_pr_opened_has_hyperlinks(self):
         m = GitHubPullRequestMessage(
             repo="org/repo",
             action="opened",
@@ -129,7 +132,10 @@ class TestTemplateMessages:
         rendered = m.to_structured().render()
         assert "#42" in rendered
         assert "Fix bug" in rendered
-        assert "`fix-bug`" in rendered
+        assert "[fix-bug](https://github.com/org/repo/tree/fix-bug)" in rendered
+        assert "[main](https://github.com/org/repo/tree/main)" in rendered
+        assert "[alice](https://github.com/alice)" in rendered
+        assert "[org/repo](https://github.com/org/repo)" in rendered
 
     def test_pr_merged(self):
         m = GitHubPullRequestMessage(
@@ -146,6 +152,36 @@ class TestTemplateMessages:
         rendered = m.to_structured().render()
         assert "merged" in rendered
 
+    def test_deployment_message(self):
+        m = GitHubDeploymentMessage(
+            repo="org/repo",
+            environment="production",
+            state="success",
+            creator="alice",
+            sha="abc12345678",
+            ref="main",
+            url="https://github.com/org/repo/deployments",
+        )
+        rendered = m.to_structured().render()
+        assert "production" in rendered
+        assert "[org/repo](https://github.com/org/repo)" in rendered
+        assert "[abc12345](https://github.com/org/repo/commit/abc12345678)" in rendered
+        assert "[main](https://github.com/org/repo/tree/main)" in rendered
+        assert "[alice](https://github.com/alice)" in rendered
+
+    def test_deployment_pending(self):
+        m = GitHubDeploymentMessage(
+            repo="org/repo",
+            environment="staging",
+            state="pending",
+            creator="bot",
+            sha="def789",
+            ref="v1.0",
+        )
+        rendered = m.to_structured().render()
+        assert "pending" in rendered
+        assert "staging" in rendered
+
     def test_generic_alert(self):
         m = GenericAlertMessage(
             source="vm-prod",
@@ -160,7 +196,7 @@ class TestTemplateMessages:
         assert "vm-prod" in rendered
         assert "90%" in rendered
 
-    def test_generic_deploy(self):
+    def test_generic_deploy_no_backticks(self):
         m = GenericDeployMessage(
             source="api-service",
             environment="production",
@@ -171,5 +207,6 @@ class TestTemplateMessages:
         )
         rendered = m.to_structured().render()
         assert "2.3.1" in rendered
+        assert "`2.3.1`" not in rendered
         assert "production" in rendered
         assert "Fixed login" in rendered

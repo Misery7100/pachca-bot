@@ -11,6 +11,28 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+GITHUB_BASE = "https://github.com"
+
+
+def _gh_user_link(login: str) -> str:
+    return f"[{login}]({GITHUB_BASE}/{login})"
+
+
+def _gh_repo_link(full_name: str) -> str:
+    return f"[{full_name}]({GITHUB_BASE}/{full_name})"
+
+
+def _gh_branch_link(repo: str, branch: str) -> str:
+    return f"[{branch}]({GITHUB_BASE}/{repo}/tree/{branch})"
+
+
+def _gh_commit_link(repo: str, sha: str) -> str:
+    return f"[{sha[:8]}]({GITHUB_BASE}/{repo}/commit/{sha})"
+
+
+def _gh_release_link(url: str, tag: str) -> str:
+    return f"[{tag}]({url})"
+
 
 class Severity(str, Enum):
     INFO = "info"
@@ -166,17 +188,18 @@ class GitHubReleaseMessage(BaseModel):
     def to_structured(self) -> StructuredMessage:
         severity = Severity.WARNING if self.prerelease else Severity.SUCCESS
         pre = "(pre-release) " if self.prerelease else ""
-        header = f"{severity.emoji} Release {pre}`{self.tag}`"
+        tag_link = _gh_release_link(self.url, self.tag)
+        header = f"{severity.emoji} Release {pre}{tag_link}"
 
         msg = StructuredMessage()
         msg.add(HeaderBlock(text=header, level=2))
         msg.add(
             FieldsBlock(
                 fields={
-                    "Repository": self.repo,
-                    "Release": self.release_name,
-                    "Tag": f"`{self.tag}`",
-                    "Author": self.author,
+                    "Repository": _gh_repo_link(self.repo),
+                    "Release": _gh_release_link(self.url, self.release_name),
+                    "Tag": _gh_release_link(self.url, self.tag),
+                    "Author": _gh_user_link(self.author),
                 }
             )
         )
@@ -204,13 +227,13 @@ class GitHubCheckFailureMessage(BaseModel):
         msg = StructuredMessage()
         msg.add(HeaderBlock(text=header, level=2))
         fields: dict[str, str] = {
-            "Repository": self.repo,
-            "Branch": f"`{self.branch}`",
-            "Commit": f"`{self.commit_sha[:8]}`",
+            "Repository": _gh_repo_link(self.repo),
+            "Branch": _gh_branch_link(self.repo, self.branch),
+            "Commit": _gh_commit_link(self.repo, self.commit_sha),
             "Result": self.conclusion,
         }
         if self.actor:
-            fields["Triggered by"] = self.actor
+            fields["Triggered by"] = _gh_user_link(self.actor)
         msg.add(FieldsBlock(fields=fields))
         msg.add(LinkBlock(text="View run", url=self.url))
         return msg
@@ -245,10 +268,12 @@ class GitHubPullRequestMessage(BaseModel):
 
         msg = StructuredMessage()
         msg.add(HeaderBlock(text=header, level=2))
+        head_link = _gh_branch_link(self.repo, self.head_branch)
+        base_link = _gh_branch_link(self.repo, self.base_branch)
         fields: dict[str, str] = {
-            "Repository": self.repo,
-            "Author": self.author,
-            "Branch": f"`{self.head_branch}` → `{self.base_branch}`",
+            "Repository": _gh_repo_link(self.repo),
+            "Author": _gh_user_link(self.author),
+            "Branch": f"{head_link} → {base_link}",
         }
         if self.draft:
             fields["Draft"] = "yes"
@@ -256,6 +281,54 @@ class GitHubPullRequestMessage(BaseModel):
         if self.body:
             msg.add(QuoteBlock(text=self.body[:1000]))
         msg.add(LinkBlock(text="View pull request", url=self.url))
+        return msg
+
+
+class GitHubDeploymentMessage(BaseModel):
+    """GitHub deployment / deployment_status event → Pachca message."""
+
+    repo: str
+    environment: str
+    description: str = ""
+    state: str = ""
+    creator: str = ""
+    sha: str = ""
+    ref: str = ""
+    url: str = ""
+
+    def to_structured(self) -> StructuredMessage:
+        state_emoji = {
+            "success": "✅",
+            "failure": "❌",
+            "error": "❌",
+            "pending": "⏳",
+            "in_progress": "🔄",
+            "queued": "📋",
+            "inactive": "💤",
+        }
+        emoji = state_emoji.get(self.state, "🚀")
+        state_label = self.state or "created"
+        header = f"{emoji} Deployment {state_label}: {self.environment}"
+
+        msg = StructuredMessage()
+        msg.add(HeaderBlock(text=header, level=2))
+        fields: dict[str, str] = {
+            "Repository": _gh_repo_link(self.repo),
+            "Environment": self.environment,
+        }
+        if self.ref:
+            fields["Ref"] = _gh_branch_link(self.repo, self.ref)
+        if self.sha:
+            fields["Commit"] = _gh_commit_link(self.repo, self.sha)
+        if self.creator:
+            fields["Deployed by"] = _gh_user_link(self.creator)
+        if self.state:
+            fields["Status"] = state_label
+        msg.add(FieldsBlock(fields=fields))
+        if self.description:
+            msg.add(TextBlock(text=self.description))
+        if self.url:
+            msg.add(LinkBlock(text="View deployment", url=self.url))
         return msg
 
 
@@ -307,7 +380,7 @@ class GenericDeployMessage(BaseModel):
         msg.add(HeaderBlock(text=header, level=2))
         fields: dict[str, str] = {
             "Environment": self.environment,
-            "Version": f"`{self.version}`",
+            "Version": self.version,
             "Status": self.status,
         }
         if self.actor:
