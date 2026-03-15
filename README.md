@@ -275,7 +275,8 @@ Pre-built composite actions in `actions/` for easy integration in any workflow.
     status: "started"
     deploy_id: "deploy-${{ github.run_id }}"
     actor: "${{ github.actor }}"
-    changelog: '["Added feature X", "Fixed bug Y"]'
+    body: |
+      New service deployment
 
 # After deploy completes
 - uses: misery7100/pachca-bot/actions/generic-deployment@main
