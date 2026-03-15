@@ -85,6 +85,10 @@ def handle_github_event(
 
     if event_type == "release" and payload.release is not None:
         rel = payload.release
+
+        if payload.action != "published":
+            return None
+
         return GitHubReleaseMessage(
             repo=repo,
             tag=rel.tag_name,
@@ -97,8 +101,10 @@ def handle_github_event(
 
     if event_type == "workflow_run" and payload.workflow_run is not None:
         wr = payload.workflow_run
+
         if payload.action != "completed":
             return None
+
         if wr.conclusion in (None, "success", "neutral", "skipped"):
             return None
 
@@ -111,6 +117,7 @@ def handle_github_event(
         )
 
         pr_nums = [pr.number for pr in wr.pull_requests if pr.number]
+
         if _try_post_ci_to_pr_thread(pr_tracker, repo, pr_nums, ci_msg):
             return {"id": None, "posted_to_pr_thread": True}
 
@@ -176,21 +183,30 @@ def handle_github_event(
             result = pr_tracker.handle_pr_event(pr_msg)
         return result
 
-    if event_type in ("deployment", "deployment_status") and payload.deployment is not None:
+    if (
+        event_type in ("deployment", "deployment_status")
+        and payload.deployment is not None
+    ):
         dep = payload.deployment
         state = ""
         url = ""
         description = dep.description or ""
+        environment = dep.environment or "unknown"
 
         if payload.deployment_status is not None:
             ds = payload.deployment_status
+
             state = ds.state
             url = ds.target_url or ds.log_url or ""
+
             if ds.description:
                 description = ds.description
 
         if not url:
             url = f"{payload.repository.html_url}/deployments"
+
+            if environment != "unknown":
+                url += f"/{environment}"
 
         deploy_msg = GitHubDeploymentMessage(
             repo=repo,
@@ -210,7 +226,9 @@ def handle_github_event(
     if event_type == "ping":
         repo_link = _gh_repo_link(repo)
         msg = StructuredMessage()
-        msg.add(HeaderBlock(text=f"{Severity.INFO.emoji} GitHub webhook connected", level=2))
+        msg.add(
+            HeaderBlock(text=f"{Severity.INFO.emoji} GitHub webhook connected", level=2)
+        )
         msg.add(FieldsBlock(fields={"Repository": repo_link}))
         msg.add(TextBlock(text="Webhook ping received successfully."))
         return msg

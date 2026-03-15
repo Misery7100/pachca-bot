@@ -20,6 +20,9 @@ _MD_HEADING_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
 
 
 def _gh_user_link(login: str) -> str:
+    if login.endswith("[bot]"):
+        return login
+
     return f"[{login}]({GITHUB_BASE}/{login})"
 
 
@@ -283,7 +286,7 @@ class GitHubReleaseMessage(BaseModel):
     def to_structured(self) -> StructuredMessage:
         pre = "(pre-release) " if self.prerelease else ""
         release_link = _gh_release_link(self.url, self.tag)
-        header = f"🔖 Release: {pre}{release_link}"
+        header = f"🔖 Release: {release_link} {pre}"
 
         msg = StructuredMessage()
         msg.add(HeaderBlock(text=header, level=2))
@@ -297,7 +300,8 @@ class GitHubReleaseMessage(BaseModel):
         )
         if self.body:
             cleaned = _strip_md_headings(self.body.strip())
-            msg.add(TextBlock(text=cleaned[:1000]))
+            msg.add(TextBlock(text=cleaned))
+
         msg.add(LinkBlock(text="View release", url=self.url))
         return msg
 
@@ -400,18 +404,25 @@ class GitHubDeploymentMessage(BaseModel):
             "Repository": _gh_repo_link(self.repo),
             "Environment": self.environment,
         }
+
         if self.ref:
             fields["Ref"] = _gh_branch_link(self.repo, self.ref)
+
         if self.sha:
             fields["Commit"] = _gh_commit_link(self.repo, self.sha)
+
         if self.creator:
             fields["Deployed by"] = _gh_user_link(self.creator)
+
         fields["Status"] = ds.label
         msg.add(FieldsBlock(fields=fields))
+
         if self.description:
             msg.add(TextBlock(text=self.description))
+
         if self.url:
             msg.add(LinkBlock(text="View deployment", url=self.url))
+
         return msg.render()
 
     def to_thread_update(self, old_state: GHDeployState) -> str:

@@ -20,7 +20,9 @@ class GenericWebhookPayload(BaseModel):
         ...,
         description="Type of event, e.g. 'deploy', 'alert', 'metric', 'custom'",
     )
-    source: str = Field(..., description="Origin system, e.g. 'vm-prod-01', 'monitoring'")
+    source: str = Field(
+        ..., description="Origin system, e.g. 'vm-prod-01', 'monitoring'"
+    )
     title: str
     severity: Severity = Severity.INFO
     details: str = ""
@@ -50,6 +52,7 @@ class _GitHubRepo(BaseModel, extra="allow"):
 
 
 class _GitHubRelease(BaseModel, extra="allow"):
+    action: str = ""
     tag_name: str = ""
     name: str = ""
     body: str = ""
