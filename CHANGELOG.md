@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ...
+
+### Changed
+
+- ...
+
+### Fixed
+
+- ...
+
+## [0.1.0] - 2026-03-15
+
+### Added
+
 - **GitHub webhook integration** — `/webhooks/github` endpoint for GitHub events
   - `release` (published) — release notifications with changelog
   - `pull_request` — full lifecycle (opened, closed, reopened, ready_for_review, converted_to_draft)
@@ -33,3 +47,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Development tooling** — justfile (`just check`, `just run`, `just format`, `just test`, `just docker-build`, `just docker-run`)
 - **Test suite** — pytest tests for app, handlers, models, security, PR tracker, deploy trackers
 - **Project scaffolding** — pyproject.toml (uv, FastAPI, pydantic, pachca), .gitignore, LICENSE (MIT), README with setup and usage docs
+
+[unreleased]: https://github.com/Misery7100/pachca-bot/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Misery7100/pachca-bot/releases/tag/v0.1.0
