@@ -2,9 +2,9 @@
 
 from unittest.mock import MagicMock
 
-from pachca_bot.config import IntegrationConfig
-from pachca_bot.models.messages import GitHubPRMessage, PRStatus
-from pachca_bot.pr_tracker import PRTracker, _PREntry
+from pachca_bot.core.config import IntegrationConfig
+from pachca_bot.integrations.github.models import GitHubPRMessage, PRStatus
+from pachca_bot.integrations.github.pr_tracker import PRTracker, _PREntry
 
 _GH_INTEGRATION = IntegrationConfig(
     chat_id=12345,

@@ -3,9 +3,17 @@ name: CI
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - pyproject.toml
+      - uv.lock
 
   pull_request:
     branches: [main]
+    paths:
+      - 'src/**'
+      - pyproject.toml
+      - uv.lock
 
   workflow_call:
   workflow_dispatch:
@@ -22,6 +30,9 @@ jobs:
 
       - name: Install dependencies
         run: uv sync
+
+      - name: Lint
+        run: uv run ruff check src/ tests/
 
       - name: Run tests
         run: uv run pytest tests/ -v

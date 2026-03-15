@@ -2,9 +2,9 @@
 
 from unittest.mock import MagicMock
 
-from pachca_bot.config import IntegrationConfig
-from pachca_bot.deploy_tracker import DeployTracker, _DeployEntry
-from pachca_bot.models.messages import DeployStatus, GenericDeployMessage
+from pachca_bot.core.config import IntegrationConfig
+from pachca_bot.integrations.generic.deploy_tracker import DeployTracker, _DeployEntry
+from pachca_bot.integrations.generic.models import DeployStatus, GenericDeployMessage
 
 _GEN_INTEGRATION = IntegrationConfig(
     chat_id=12345,

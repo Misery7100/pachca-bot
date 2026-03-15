@@ -10,9 +10,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from pachca_bot.client import PachcaClient
-from pachca_bot.config import IntegrationConfig
-from pachca_bot.models.messages import DeployStatus, GenericDeployMessage
+from pachca_bot.core.client import PachcaClient
+from pachca_bot.core.config import IntegrationConfig
+from pachca_bot.integrations.generic.models import DeployStatus, GenericDeployMessage
 
 logger = logging.getLogger(__name__)
 
@@ -57,17 +57,25 @@ class DeployTracker:
     @staticmethod
     def _infer_status(content: str) -> DeployStatus:
         for ds in DeployStatus:
-            if f"{ds.emoji} Deploy {ds.label}" in content:
+            if f"**Status:** {ds.label}" in content:
                 return ds
         return DeployStatus.STARTED
 
-    def handle_deploy_event(self, deploy_msg: GenericDeployMessage) -> dict:
+    def handle_deploy_event(
+        self,
+        deploy_msg: GenericDeployMessage,
+        display_name: str | None = None,
+        display_avatar_url: str | None = None,
+    ) -> dict:
+        _name = display_name or self._integration.display_name
+        _avatar = display_avatar_url or self._integration.display_avatar_url
+
         if not deploy_msg.deploy_id:
             content = deploy_msg.to_parent()
             return self._client.send_message(
                 content,
-                display_name=self._integration.display_name,
-                display_avatar_url=self._integration.display_avatar_url,
+                display_name=_name,
+                display_avatar_url=_avatar,
                 chat_id=self._integration.chat_id,
             )
 
@@ -84,8 +92,8 @@ class DeployTracker:
             content = deploy_msg.to_parent()
             result = self._client.send_message(
                 content,
-                display_name=self._integration.display_name,
-                display_avatar_url=self._integration.display_avatar_url,
+                display_name=_name,
+                display_avatar_url=_avatar,
                 chat_id=self._integration.chat_id,
             )
             msg_id = result.get("id")
@@ -107,8 +115,8 @@ class DeployTracker:
                 self._client.post_to_thread(
                     thread_id,
                     thread_content,
-                    display_name=self._integration.display_name,
-                    display_avatar_url=self._integration.display_avatar_url,
+                    display_name=_name,
+                    display_avatar_url=_avatar,
                 )
         except Exception:
             logger.warning("Failed to post deploy thread update", exc_info=True)
@@ -128,8 +136,8 @@ class DeployTracker:
             new_content = deploy_msg.to_parent()
             result = self._client.send_message(
                 new_content,
-                display_name=self._integration.display_name,
-                display_avatar_url=self._integration.display_avatar_url,
+                display_name=_name,
+                display_avatar_url=_avatar,
                 chat_id=self._integration.chat_id,
             )
             msg_id = result.get("id")

@@ -14,9 +14,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from pachca_bot.client import PachcaClient
-from pachca_bot.config import IntegrationConfig
-from pachca_bot.models.messages import GitHubPRMessage, PRStatus
+from pachca_bot.core.client import PachcaClient
+from pachca_bot.core.config import IntegrationConfig
+from pachca_bot.integrations.github.models import GitHubPRMessage, PRStatus
 
 logger = logging.getLogger(__name__)
 

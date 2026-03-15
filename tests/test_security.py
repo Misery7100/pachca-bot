@@ -3,7 +3,8 @@
 import hashlib
 import hmac
 
-from pachca_bot.security import verify_bearer_token, verify_github_signature
+from pachca_bot.integrations.generic.security import verify_bearer_token
+from pachca_bot.integrations.github.security import verify_signature as verify_github_signature
 
 
 class TestGitHubSignature:

@@ -28,10 +28,10 @@ inputs:
     description: "Who triggered the deployment"
     required: false
     default: ""
-  changelog:
-    description: 'JSON array of change descriptions (e.g. ["Added caching", "Fixed bug"])'
+  body:
+    description: "Plain text body for the deployment (similar to GitHub release notes)"
     required: false
-    default: "[]"
+    default: ""
   url:
     description: "Link to deployment details"
     required: false
@@ -55,7 +55,7 @@ runs:
             --arg status "${{ inputs.status }}" \
             --arg deploy_id "${{ inputs.deploy_id }}" \
             --arg actor "${{ inputs.actor }}" \
-            --argjson changelog '${{ inputs.changelog }}' \
+            --arg body "${{ inputs.body }}" \
             --arg url "${{ inputs.url }}" \
             '{
               event_type: $event_type,
@@ -66,7 +66,7 @@ runs:
               status: $status,
               deploy_id: $deploy_id,
               actor: $actor,
-              changelog: $changelog,
+              body: $body,
               url: $url
             }'
           )"

@@ -2,9 +2,9 @@
 
 from unittest.mock import MagicMock
 
-from pachca_bot.config import IntegrationConfig
-from pachca_bot.gh_deploy_tracker import GHDeployTracker, _GHDeployEntry
-from pachca_bot.models.messages import GHDeployState, GitHubDeploymentMessage
+from pachca_bot.core.config import IntegrationConfig
+from pachca_bot.integrations.github.gh_deploy_tracker import GHDeployTracker, _GHDeployEntry
+from pachca_bot.integrations.github.models import GHDeployState, GitHubDeploymentMessage
 
 _GH_INTEGRATION = IntegrationConfig(
     chat_id=12345,

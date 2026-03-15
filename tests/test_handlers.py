@@ -2,12 +2,14 @@
 
 from unittest.mock import MagicMock
 
-from pachca_bot.config import IntegrationConfig
-from pachca_bot.handlers.generic import handle_generic_event
-from pachca_bot.handlers.github import handle_github_event
-from pachca_bot.models.messages import PRStatus, Severity, StructuredMessage
-from pachca_bot.models.webhooks import GenericWebhookPayload, GitHubWebhookPayload
-from pachca_bot.pr_tracker import PRTracker
+from pachca_bot.core.blocks import StructuredMessage
+from pachca_bot.core.config import IntegrationConfig
+from pachca_bot.integrations.generic.handler import GenericHandler
+from pachca_bot.integrations.generic.models import GenericWebhookPayload, Severity
+from pachca_bot.integrations.github.gh_deploy_tracker import GHDeployTracker
+from pachca_bot.integrations.github.handler import GitHubHandler
+from pachca_bot.integrations.github.models import GitHubWebhookPayload, PRStatus
+from pachca_bot.integrations.github.pr_tracker import PRTracker
 
 _GH_INTEGRATION = IntegrationConfig(
     chat_id=12345,
@@ -16,7 +18,18 @@ _GH_INTEGRATION = IntegrationConfig(
 )
 
 
-def _make_mock_tracker() -> PRTracker:
+def _make_github_handler(pr_tracker=None, gh_deploy_tracker=None) -> GitHubHandler:
+    client = MagicMock()
+    return GitHubHandler(
+        client=client,
+        integration=_GH_INTEGRATION,
+        pr_tracker=pr_tracker,
+        gh_deploy_tracker=gh_deploy_tracker,
+        webhook_secret="gh-secret",
+    )
+
+
+def _make_mock_pr_tracker() -> PRTracker:
     client = MagicMock()
     client.send_message.return_value = {"id": 100}
     client.get_messages.return_value = []
@@ -28,6 +41,7 @@ def _make_mock_tracker() -> PRTracker:
 
 class TestGitHubHandler:
     def test_release(self):
+        handler = _make_github_handler()
         payload = GitHubWebhookPayload.model_validate(
             {
                 "action": "published",
@@ -41,7 +55,7 @@ class TestGitHubHandler:
                 },
             }
         )
-        result = handle_github_event("release", payload)
+        result = handler._process("release", payload)
         assert isinstance(result, StructuredMessage)
         rendered = result.render()
         assert "🔖" in rendered
@@ -49,10 +63,11 @@ class TestGitHubHandler:
         assert "[View release](" in rendered
 
     def test_pr_reopened_always_new(self):
-        tracker = _make_mock_tracker()
+        tracker = _make_mock_pr_tracker()
         tracker._store[("org/repo", 7)] = MagicMock(
             message_id=100, status=PRStatus.CLOSED, content=""
         )
+        handler = _make_github_handler(pr_tracker=tracker)
         payload = GitHubWebhookPayload.model_validate(
             {
                 "action": "reopened",
@@ -67,7 +82,7 @@ class TestGitHubHandler:
                 },
             }
         )
-        result = handle_github_event("pull_request", payload, pr_tracker=tracker)
+        result = handler._process("pull_request", payload)
         assert isinstance(result, dict)
         tracker._client.send_message.assert_called_once()
         content = tracker._client.send_message.call_args[0][0]
@@ -75,12 +90,11 @@ class TestGitHubHandler:
         assert "Reopened" in content
 
     def test_deployment_tracked(self):
-        from pachca_bot.gh_deploy_tracker import GHDeployTracker
-
         client = MagicMock()
         client.send_message.return_value = {"id": 300}
         client.get_messages.return_value = []
         gh_tracker = GHDeployTracker(client, _GH_INTEGRATION)
+        handler = _make_github_handler(gh_deploy_tracker=gh_tracker)
 
         payload = GitHubWebhookPayload.model_validate(
             {
@@ -98,20 +112,33 @@ class TestGitHubHandler:
                 },
             }
         )
-        result = handle_github_event("deployment", payload, gh_deploy_tracker=gh_tracker)
+        result = handler._process("deployment", payload)
         assert isinstance(result, dict)
         assert result["id"] == 300
 
     def test_ping(self):
+        handler = _make_github_handler()
         payload = GitHubWebhookPayload.model_validate(
             {"zen": "...", "repository": {"full_name": "org/repo"}}
         )
-        result = handle_github_event("ping", payload)
+        result = handler._process("ping", payload)
         assert isinstance(result, StructuredMessage)
 
 
 class TestGenericHandler:
     def test_alert_source_as_field(self):
+        client = MagicMock()
+        gen_config = IntegrationConfig(
+            chat_id=12345,
+            display_name="Events Bot",
+            display_avatar_url="https://example.com/events.png",
+        )
+        handler = GenericHandler(
+            client=client,
+            integration=gen_config,
+            deploy_tracker=None,
+            webhook_secret="gen-secret",
+        )
         payload = GenericWebhookPayload(
             event_type="alert",
             source="monitor",
@@ -119,11 +146,23 @@ class TestGenericHandler:
             severity=Severity.WARNING,
             fields={"Host": "vm-01"},
         )
-        result = handle_generic_event(payload)
+        result = handler._process(payload)
         assert isinstance(result, StructuredMessage)
         assert "**Source:** monitor" in result.render()
 
     def test_deploy_without_id(self):
+        client = MagicMock()
+        gen_config = IntegrationConfig(
+            chat_id=12345,
+            display_name="Events Bot",
+            display_avatar_url="https://example.com/events.png",
+        )
+        handler = GenericHandler(
+            client=client,
+            integration=gen_config,
+            deploy_tracker=None,
+            webhook_secret="gen-secret",
+        )
         payload = GenericWebhookPayload(
             event_type="deploy",
             source="api",
@@ -132,5 +171,5 @@ class TestGenericHandler:
             version="1.2.3",
             status="succeeded",
         )
-        result = handle_generic_event(payload)
+        result = handler._process(payload)
         assert isinstance(result, StructuredMessage)

@@ -25,18 +25,20 @@ All settings are read from environment variables:
 |---|---|---|---|
 | `PACHCA_ACCESS_TOKEN` | yes | — | Pachca API bot token |
 | `PACHCA_CHAT_ID` | no* | — | Fallback chat ID when integration-specific ID not set |
-| `GITHUB_PACHCA_CHAT_ID` | no* | — | Target chat for GitHub integration |
-| `GENERIC_PACHCA_CHAT_ID` | no* | — | Target chat for generic integration |
-| `GITHUB_WEBHOOK_SECRET` | yes* | — | GitHub HMAC secret (required for `/webhooks/github`) |
-| `GENERIC_WEBHOOK_SECRET` | yes* | — | Bearer token for generic endpoint (required for `/webhooks/generic`) |
-| `GITHUB_BOT_DISPLAY_NAME` | no | `"GitHub Bot"` | Display name for GitHub messages |
-| `GENERIC_BOT_DISPLAY_NAME` | no | `"Events Bot"` | Display name for generic messages |
-| `GITHUB_BOT_DISPLAY_AVATAR_URL` | no | [default](https://raw.githubusercontent.com/Misery7100/pachca-bot/main/images/github-bot.png) | Avatar URL for GitHub messages |
-| `GENERIC_BOT_DISPLAY_AVATAR_URL` | no | [default](https://raw.githubusercontent.com/Misery7100/pachca-bot/main/images/events-bot.png) | Avatar URL for generic messages |
+| `GITHUB__PACHCA_CHAT_ID` | no* | — | Target chat for GitHub integration |
+| `GENERIC__PACHCA_CHAT_ID` | no* | — | Target chat for generic integration |
+| `GITHUB__WEBHOOK_SECRET` | yes* | — | GitHub HMAC secret (required for `/webhooks/github`) |
+| `GENERIC__WEBHOOK_SECRET` | yes* | — | Bearer token for generic endpoint (required for `/webhooks/generic`) |
+| `GITHUB__BOT_DISPLAY_NAME` | no | `"GitHub Bot"` | Display name for GitHub messages |
+| `GENERIC__BOT_DISPLAY_NAME` | no | `"Events Bot"` | Display name for generic messages |
+| `GITHUB__BOT_DISPLAY_AVATAR_URL` | no | [default](https://raw.githubusercontent.com/Misery7100/pachca-bot/main/images/github-bot.png) | Avatar URL for GitHub messages |
+| `GENERIC__BOT_DISPLAY_AVATAR_URL` | no | [default](https://raw.githubusercontent.com/Misery7100/pachca-bot/main/images/events-bot.png) | Avatar URL for generic messages |
 | `HOST` | no | `0.0.0.0` | Server bind address |
 | `PORT` | no | `8000` | Server bind port |
 
-\* At least one of `PACHCA_CHAT_ID`, `GITHUB_PACHCA_CHAT_ID`, or `GENERIC_PACHCA_CHAT_ID` must be set. Use `PACHCA_CHAT_ID` alone for both integrations, or set integration-specific IDs to route GitHub and generic events to different chats. `GITHUB_WEBHOOK_SECRET` and `GENERIC_WEBHOOK_SECRET` are required for their respective endpoints — requests are rejected with 403 if the secret is not configured.
+\* At least one of `PACHCA_CHAT_ID`, `GITHUB__PACHCA_CHAT_ID`, or `GENERIC__PACHCA_CHAT_ID` must be set. Use `PACHCA_CHAT_ID` alone for both integrations, or set integration-specific IDs to route GitHub and generic events to different chats. `GITHUB__WEBHOOK_SECRET` and `GENERIC__WEBHOOK_SECRET` are required for their respective endpoints — requests are rejected with 403 if the secret is not configured.
+
+**Backward compatibility:** Flat env vars (`GITHUB_WEBHOOK_SECRET`, `GITHUB_PACHCA_CHAT_ID`, etc.) are still supported and mapped to the nested format.
 
 ## Endpoints
 
@@ -66,10 +68,10 @@ docker run -d --name pachca-bot -p 8000:8000 \
 # Or use separate chats per integration
 docker run -d --name pachca-bot -p 8000:8000 \
     -e PACHCA_ACCESS_TOKEN="your-pachca-bot-token" \
-    -e GITHUB_PACHCA_CHAT_ID="github-chat-id" \
-    -e GENERIC_PACHCA_CHAT_ID="generic-chat-id" \
-    -e GITHUB_WEBHOOK_SECRET="your-secret-here" \
-    -e GENERIC_WEBHOOK_SECRET="your-generic-secret" \
+    -e GITHUB__PACHCA_CHAT_ID="github-chat-id" \
+    -e GENERIC__PACHCA_CHAT_ID="generic-chat-id" \
+    -e GITHUB__WEBHOOK_SECRET="your-secret-here" \
+    -e GENERIC__WEBHOOK_SECRET="your-generic-secret" \
     pachca-bot
 ```
 
@@ -81,7 +83,7 @@ Generate a random secret string. This will be shared between GitHub and the bot 
 openssl rand -hex 32
 ```
 
-Set this as the `GITHUB_WEBHOOK_SECRET` environment variable for the bot.
+Set this as the `GITHUB__WEBHOOK_SECRET` environment variable for the bot.
 
 ### Step 3: Configure the GitHub webhook
 
@@ -149,7 +151,7 @@ The generic webhook endpoint accepts structured JSON payloads from any system. I
 openssl rand -hex 32
 ```
 
-Set this as the `GENERIC_WEBHOOK_SECRET` environment variable for the bot.
+Set this as the `GENERIC__WEBHOOK_SECRET` environment variable for the bot.
 
 ### Step 2: Send webhooks
 
@@ -190,7 +192,7 @@ curl -X POST https://your-bot-host/webhooks/generic \
         "status": "started",
         "deploy_id": "deploy-42",
         "actor": "deployer",
-        "changelog": ["Added caching", "Fixed login bug"]
+        "body": "Added caching\nFixed login bug"
     }'
 
 # Update status (posts thread update, patches parent)
@@ -223,8 +225,10 @@ curl -X POST https://your-bot-host/webhooks/generic \
 | `version` | string | no | For deploys: version being deployed |
 | `status` | string | no | For deploys: `started` / `succeeded` / `failed` / `rolled_back` |
 | `actor` | string | no | Who triggered the event |
-| `changelog` | string[] | no | For deploys: list of changes |
+| `body` | string | no | For deploys: plain text body (similar to GitHub release notes) |
 | `deploy_id` | string | no | For deploys: unique ID for thread-based status tracking |
+| `display_name` | string | no | Override bot display name for this request (e.g. unsupported integration) |
+| `display_avatar_url` | string | no | Override bot avatar URL for this request |
 
 ### Severity Levels
 

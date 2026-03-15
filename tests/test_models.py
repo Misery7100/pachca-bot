@@ -1,18 +1,19 @@
 """Tests for message models and rendering."""
 
-from pachca_bot.models.messages import (
+from pachca_bot.core.blocks import patch_status_in_content, render_status_update
+from pachca_bot.integrations.generic.models import (
     DeployStatus,
     GenericAlertMessage,
     GenericDeployMessage,
+    Severity,
+)
+from pachca_bot.integrations.github.models import (
     GHDeployState,
     GitHubCIMessage,
     GitHubDeploymentMessage,
     GitHubPRMessage,
     GitHubReleaseMessage,
     PRStatus,
-    Severity,
-    patch_status_in_content,
-    render_status_update,
 )
 
 

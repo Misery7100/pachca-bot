@@ -8,9 +8,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from pachca_bot.client import PachcaClient
-from pachca_bot.config import IntegrationConfig
-from pachca_bot.models.messages import GHDeployState, GitHubDeploymentMessage
+from pachca_bot.core.client import PachcaClient
+from pachca_bot.core.config import IntegrationConfig
+from pachca_bot.integrations.github.models import GHDeployState, GitHubDeploymentMessage
 
 logger = logging.getLogger(__name__)
 

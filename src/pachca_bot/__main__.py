@@ -2,13 +2,13 @@
 
 import uvicorn
 
-from pachca_bot.config import get_settings
+from pachca_bot.core.config import get_settings
 
 
 def main() -> None:
     settings = get_settings()
     uvicorn.run(
-        "pachca_bot.app:create_app",
+        "pachca_bot.api.app:create_app",
         factory=True,
         host=settings.host,
         port=settings.port,

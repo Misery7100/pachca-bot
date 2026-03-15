@@ -9,11 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- ...
+- **Generic webhook display override** — `display_name` and `display_avatar_url` in payload to override bot identity per request (useful when source integration is unsupported)
+- **Project restructuring** — `core/` (models, client, config, security), `api/` (FastAPI routes), `integrations/github/` (PR tracker, deploy tracker, handler), `integrations/generic/` (deploy tracker, handler); handlers as dataclass-based classes
+- **Cursor-based message pagination** — `get_messages` uses limit=50 and cursor to scan up to 300 messages for serverless deployments
+- **CI lint step** — ruff check in GitHub Actions
 
 ### Changed
 
-- ...
+- **Generic deploy body** — Replaced `changelog` (JSON array) with `body` (plain text) for deploy events, similar to GitHub release notes
+- **Generic deployment action** — `body` input instead of `changelog`
 
 ### Removed
 

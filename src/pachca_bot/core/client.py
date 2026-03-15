@@ -8,7 +8,10 @@ from typing import TYPE_CHECKING
 from pachca import Pachca
 
 if TYPE_CHECKING:
-    from pachca_bot.config import Settings
+    from pachca_bot.core.config import Settings
+
+MESSAGES_LIMIT = 50
+MESSAGES_MAX_SCAN = 300
 
 logger = logging.getLogger(__name__)
 
@@ -92,10 +95,39 @@ class PachcaClient:
         logger.info("Thread reply sent (thread=%s, id=%s)", thread_id, result.get("id"))
         return result
 
-    def get_messages(self, chat_id: int) -> list[dict]:
-        """Retrieve recent messages from a chat."""
+    def get_messages(self, chat_id: int, max_messages: int = MESSAGES_MAX_SCAN) -> list[dict]:
+        """Retrieve up to max_messages from a chat using cursor-based pagination.
+
+        Uses limit=50 per request and sequential requests for serverless deployments
+        where in-memory state cannot be kept. Stops when max_messages reached or
+        no more pages (meta.paginate.next_page).
+        """
         client = self._ensure_client()
-        return client.get_messages(chat_id=chat_id)
+        messages: list[dict] = []
+        cursor: str | None = None
+
+        while len(messages) < max_messages:
+            payload: dict = {
+                "chat_id": chat_id,
+                "limit": MESSAGES_LIMIT,
+                "sort[id]": "desc",
+            }
+            if cursor:
+                payload["cursor"] = cursor
+
+            response = client.call_api(Pachca.MESSAGES, "get", payload)
+            data = response.get("data", [])
+            messages.extend(data)
+
+            meta = response.get("meta", {})
+            paginate = meta.get("paginate", {})
+            next_page = paginate.get("next_page")
+
+            if not next_page or len(data) < MESSAGES_LIMIT:
+                break
+            cursor = next_page
+
+        return messages[:max_messages]
 
     def close(self) -> None:
         if self._client is not None:

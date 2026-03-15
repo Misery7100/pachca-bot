@@ -8,15 +8,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from pachca_bot.app import create_app
+from pachca_bot.api.app import create_app
 
 
 @pytest.fixture()
 def _env(monkeypatch):
     monkeypatch.setenv("PACHCA_ACCESS_TOKEN", "test-token")
     monkeypatch.setenv("PACHCA_CHAT_ID", "12345")
-    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "gh-secret")
-    monkeypatch.setenv("GENERIC_WEBHOOK_SECRET", "gen-secret")
+    monkeypatch.setenv("GITHUB__WEBHOOK_SECRET", "gh-secret")
+    monkeypatch.setenv("GENERIC__WEBHOOK_SECRET", "gen-secret")
 
 
 @pytest.fixture()
@@ -29,7 +29,7 @@ def client(_env):
     mock_pachca.post_to_thread.return_value = {"id": 501}
     mock_pachca.update_message.return_value = {"id": 999}
 
-    with patch("pachca_bot.app.PachcaClient", return_value=mock_pachca):
+    with patch("pachca_bot.api.app.PachcaClient", return_value=mock_pachca):
         with TestClient(app) as tc:
             yield tc, mock_pachca
 
@@ -90,11 +90,12 @@ class TestGitHubEndpoint:
     def test_github_secret_not_configured(self, monkeypatch):
         monkeypatch.setenv("PACHCA_ACCESS_TOKEN", "test-token")
         monkeypatch.setenv("PACHCA_CHAT_ID", "12345")
+        monkeypatch.delenv("GITHUB__WEBHOOK_SECRET", raising=False)
         monkeypatch.delenv("GITHUB_WEBHOOK_SECRET", raising=False)
-        monkeypatch.setenv("GENERIC_WEBHOOK_SECRET", "gen-secret")
+        monkeypatch.setenv("GENERIC__WEBHOOK_SECRET", "gen-secret")
         app = create_app()
         mock_pachca = MagicMock()
-        with patch("pachca_bot.app.PachcaClient", return_value=mock_pachca):
+        with patch("pachca_bot.api.app.PachcaClient", return_value=mock_pachca):
             with TestClient(app) as tc:
                 resp = tc.post(
                     "/webhooks/github",
@@ -102,7 +103,7 @@ class TestGitHubEndpoint:
                     headers={"X-Hub-Signature-256": "sha256=x", "X-GitHub-Event": "release"},
                 )
         assert resp.status_code == 403
-        assert "GITHUB_WEBHOOK_SECRET" in resp.json()["detail"]
+        assert "webhook secret" in resp.json()["detail"].lower()
 
     def test_pr_opened(self, client):
         tc, mock = client
@@ -169,11 +170,12 @@ class TestGenericEndpoint:
     def test_generic_secret_not_configured(self, monkeypatch):
         monkeypatch.setenv("PACHCA_ACCESS_TOKEN", "test-token")
         monkeypatch.setenv("PACHCA_CHAT_ID", "12345")
-        monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "gh-secret")
+        monkeypatch.setenv("GITHUB__WEBHOOK_SECRET", "gh-secret")
+        monkeypatch.delenv("GENERIC__WEBHOOK_SECRET", raising=False)
         monkeypatch.delenv("GENERIC_WEBHOOK_SECRET", raising=False)
         app = create_app()
         mock_pachca = MagicMock()
-        with patch("pachca_bot.app.PachcaClient", return_value=mock_pachca):
+        with patch("pachca_bot.api.app.PachcaClient", return_value=mock_pachca):
             with TestClient(app) as tc:
                 resp = tc.post(
                     "/webhooks/generic",
@@ -183,7 +185,7 @@ class TestGenericEndpoint:
                     headers={"X-Authorization": "Bearer any-token"},
                 )
         assert resp.status_code == 403
-        assert "GENERIC_WEBHOOK_SECRET" in resp.json()["detail"]
+        assert "webhook secret" in resp.json()["detail"].lower()
 
     def test_deploy_with_id(self, client):
         tc, mock = client
