@@ -95,7 +95,7 @@ GitHub will send a `ping` event to verify the webhook is working. You should see
 | `release` | `published` | Posts release notification with changelog |
 | `pull_request` | `opened`, `closed`, `reopened`, `ready_for_review`, `converted_to_draft` | Creates/updates PR message with thread-based status tracking |
 | `check_suite` | `completed` (success) | Marks associated PRs as "Ready to merge" |
-| `workflow_run` | `completed` (failure/cancelled) | Posts CI failure notification |
+| `workflow_run` | `completed` (failure/cancelled) | Posts CI failure — to PR thread if associated, otherwise to channel |
 | `check_run` | `completed` (failure) | Posts individual check failure notification |
 | `deployment` | `created` | Posts deployment notification |
 | `deployment_status` | `created` | Posts deployment status update |
@@ -117,8 +117,8 @@ The bot tracks pull requests through their full lifecycle using **thread-based m
 1. When a new PR is created (draft or regular), the bot posts a parent message to the channel
 2. On each subsequent status change, the bot:
    - Creates a thread on the parent message (if not already created)
-   - Posts a status transition reply in the thread (e.g. "📝 Draft → 🆕 Open")
-   - Updates the parent message content to reflect the new status
+   - Posts a structured status transition reply in the thread ("Status updated: Before: ... / After: ...")
+   - Patches the parent message header/status (preserving body, author, branches)
 3. If the parent message was deleted, the bot creates a new one on the next update
 
 ---
@@ -158,7 +158,26 @@ curl -X POST https://your-bot-host/webhooks/generic \
 
 #### Deploy events
 
+When a `deploy_id` is provided, the bot tracks deploys like PRs — the first event creates a parent message, and subsequent status changes for the same ID post thread updates and patch the parent.
+
 ```bash
+# Start deploy (creates parent message)
+curl -X POST https://your-bot-host/webhooks/generic \
+    -H "Authorization: Bearer YOUR_SECRET" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "event_type": "deploy",
+        "source": "api-service",
+        "title": "",
+        "environment": "production",
+        "version": "2.5.0",
+        "status": "started",
+        "deploy_id": "deploy-42",
+        "actor": "deployer",
+        "changelog": ["Added caching", "Fixed login bug"]
+    }'
+
+# Update status (posts thread update, patches parent)
 curl -X POST https://your-bot-host/webhooks/generic \
     -H "Authorization: Bearer YOUR_SECRET" \
     -H "Content-Type: application/json" \
@@ -169,8 +188,7 @@ curl -X POST https://your-bot-host/webhooks/generic \
         "environment": "production",
         "version": "2.5.0",
         "status": "succeeded",
-        "actor": "deployer",
-        "changelog": ["Added caching", "Fixed login bug"]
+        "deploy_id": "deploy-42"
     }'
 ```
 
@@ -190,6 +208,7 @@ curl -X POST https://your-bot-host/webhooks/generic \
 | `status` | string | no | For deploys: `started` / `succeeded` / `failed` / `rolled_back` |
 | `actor` | string | no | Who triggered the event |
 | `changelog` | string[] | no | For deploys: list of changes |
+| `deploy_id` | string | no | For deploys: unique ID for thread-based status tracking |
 
 ### Severity Levels
 
