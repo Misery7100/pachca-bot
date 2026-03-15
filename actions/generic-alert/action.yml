@@ -38,7 +38,7 @@ runs:
       shell: bash
       run: |
         curl -sf -X POST "${{ inputs.host }}/webhooks/generic" \
-          -H "Authorization: Bearer ${{ inputs.secret }}" \
+          -H "X-Authorization: Bearer ${{ inputs.secret }}" \
           -H "Content-Type: application/json" \
           -d "$(jq -n \
             --arg event_type "alert" \

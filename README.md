@@ -37,7 +37,7 @@ All settings are read from environment variables:
 |---|---|---|---|
 | `/health` | GET | — | Health check |
 | `/webhooks/github` | POST | HMAC-SHA256 (`X-Hub-Signature-256`) | GitHub webhook receiver |
-| `/webhooks/generic` | POST | Bearer token (`Authorization`) | Generic webhook receiver |
+| `/webhooks/generic` | POST | Bearer token (`X-Authorization`) | Generic webhook receiver |
 
 ---
 
@@ -137,13 +137,13 @@ Set this as the `GENERIC_WEBHOOK_SECRET` environment variable for the bot.
 
 ### Step 2: Send webhooks
 
-Include the secret as a Bearer token in the `Authorization` header.
+Include the secret as a Bearer token in the `X-Authorization` header.
 
 #### Alert events
 
 ```bash
 curl -X POST https://your-bot-host/webhooks/generic \
-    -H "Authorization: Bearer YOUR_SECRET" \
+    -H "X-Authorization: Bearer YOUR_SECRET" \
     -H "Content-Type: application/json" \
     -d '{
         "event_type": "alert",
@@ -163,7 +163,7 @@ When a `deploy_id` is provided, the bot tracks deploys like PRs — the first ev
 ```bash
 # Start deploy (creates parent message)
 curl -X POST https://your-bot-host/webhooks/generic \
-    -H "Authorization: Bearer YOUR_SECRET" \
+    -H "X-Authorization: Bearer YOUR_SECRET" \
     -H "Content-Type: application/json" \
     -d '{
         "event_type": "deploy",
@@ -179,7 +179,7 @@ curl -X POST https://your-bot-host/webhooks/generic \
 
 # Update status (posts thread update, patches parent)
 curl -X POST https://your-bot-host/webhooks/generic \
-    -H "Authorization: Bearer YOUR_SECRET" \
+    -H "X-Authorization: Bearer YOUR_SECRET" \
     -H "Content-Type: application/json" \
     -d '{
         "event_type": "deploy",

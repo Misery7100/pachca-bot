@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ...
 
+## [v0.1.1] - 2026-03-15
+
+### Changed
+
+- **Generic webhook auth** — Bearer token now read from `X-Authorization` header instead of `Authorization`
+
+### Fixed
+
+- **Docker** — build wheel and install instead of editable install so `pachca_bot` module is available in the final image
+
 ## [v0.1.0] - 2026-03-15
 
 ### Added
@@ -48,5 +58,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Test suite** — pytest tests for app, handlers, models, security, PR tracker, deploy trackers
 - **Project scaffolding** — pyproject.toml (uv, FastAPI, pydantic, pachca), .gitignore, LICENSE (MIT), README with setup and usage docs
 
-[unreleased]: https://github.com/Misery7100/pachca-bot/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/Misery7100/pachca-bot/compare/v0.1.1...HEAD
+[v0.1.1]: https://github.com/Misery7100/pachca-bot/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/Misery7100/pachca-bot/releases/tag/v0.1.0

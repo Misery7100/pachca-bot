@@ -80,7 +80,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         if settings.github_webhook_secret:
             valid = verify_github_signature(
-                x_hub_signature_256, body, settings.github_webhook_secret
+                x_hub_signature_256,
+                body,
+                settings.github_webhook_secret,
             )
             if not valid:
                 raise HTTPException(status_code=403, detail="Invalid signature")
@@ -107,19 +109,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             client = _get_client()
             content = result.render()
             api_result = client.send_message(content, display_name=DISPLAY_NAME_GITHUB)
-            return WebhookResponse(ok=True, message_id=api_result.get("id"), detail="Message sent")
+            return WebhookResponse(
+                ok=True, message_id=api_result.get("id"), detail="Message sent"
+            )
 
         return WebhookResponse(ok=True, detail="Event handled")
 
     @app.post("/webhooks/generic", response_model=WebhookResponse)
     async def generic_webhook(
         request: Request,
-        authorization: str = Header(""),
+        x_authorization: str = Header(""),
     ) -> WebhookResponse:
         settings = get_settings()
 
         if settings.generic_webhook_secret:
-            if not verify_bearer_token(authorization, settings.generic_webhook_secret):
+            if not verify_bearer_token(
+                x_authorization, settings.generic_webhook_secret
+            ):
                 raise HTTPException(status_code=403, detail="Unauthorized")
 
         body = await request.body()
@@ -136,6 +142,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         client = _get_client()
         content = result.render()
         api_result = client.send_message(content, display_name=DISPLAY_NAME_GENERIC)
-        return WebhookResponse(ok=True, message_id=api_result.get("id"), detail="Message sent")
+        return WebhookResponse(
+            ok=True, message_id=api_result.get("id"), detail="Message sent"
+        )
 
     return app
