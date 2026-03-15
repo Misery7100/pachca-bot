@@ -110,7 +110,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             content = result.render()
             api_result = client.send_message(content, display_name=DISPLAY_NAME_GITHUB)
             return WebhookResponse(
-                ok=True, message_id=api_result.get("id"), detail="Message sent"
+                ok=True,
+                message_id=api_result.get("id"),
+                detail="Message sent",
             )
 
         return WebhookResponse(ok=True, detail="Event handled")
@@ -124,7 +126,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         if settings.generic_webhook_secret:
             if not verify_bearer_token(
-                x_authorization, settings.generic_webhook_secret
+                x_authorization,
+                settings.generic_webhook_secret,
             ):
                 raise HTTPException(status_code=403, detail="Unauthorized")
 
@@ -143,7 +146,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         content = result.render()
         api_result = client.send_message(content, display_name=DISPLAY_NAME_GENERIC)
         return WebhookResponse(
-            ok=True, message_id=api_result.get("id"), detail="Message sent"
+            ok=True,
+            message_id=api_result.get("id"),
+            detail="Message sent",
         )
 
     return app
