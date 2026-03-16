@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ...
+
+### Changed
+
+- ...
+
+### Removed
+
+- ...
+
+### Fixed
+
+- ...
+
+## [0.1.6] - 2026-03-16
+
+### Added
+
 - **pull_request_review events** — Reviews (submitted, edited, dismissed) are posted to the PR thread: approved, changes requested, commented, or dismissed
 - **Ready to merge only when checks + approval** — "Ready to merge" is now set only when both (a) all checks passed and (b) at least one approval. Check suite pass alone posts "All checks passed" to the thread and keeps parent at "Ready for review". Approval promotes to "Ready to merge"; changes_requested or dismissed downgrades back to "Ready for review"
 
@@ -119,7 +137,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Test suite** — pytest tests for app, handlers, models, security, PR tracker, deploy trackers
 - **Project scaffolding** — pyproject.toml (uv, FastAPI, pydantic, pachca), .gitignore, LICENSE (MIT), README with setup and usage docs
 
-[unreleased]: https://github.com/Misery7100/pachca-bot/compare/v0.1.5...HEAD
+[unreleased]: https://github.com/Misery7100/pachca-bot/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/Misery7100/pachca-bot/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Misery7100/pachca-bot/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Misery7100/pachca-bot/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/Misery7100/pachca-bot/compare/v0.1.2...v0.1.3
