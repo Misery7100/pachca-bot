@@ -149,8 +149,7 @@ class TestPRTrackerCIFailure:
         )
         assert result == {"id": 100}
         client.post_to_thread.assert_called_once()
-        assert "passed" in client.post_to_thread.call_args[0][1]
-        assert "Status updated" in client.post_to_thread.call_args[0][1]
+        assert "Check passed" in client.post_to_thread.call_args[0][1]
         client.update_message.assert_not_called()
 
     def test_check_suite_pass_promotes_when_has_approval(self):
@@ -197,8 +196,8 @@ class TestPRTrackerCIFailure:
             repo="org/repo", number=1, commit_sha="abc123", check_name="Lint"
         )
         assert client.post_to_thread.call_count == 2
-        assert "CI passed" in client.post_to_thread.call_args_list[0][0][1]
-        assert "Lint passed" in client.post_to_thread.call_args_list[1][0][1]
+        assert "**Check passed:** ✅ CI" in client.post_to_thread.call_args_list[0][0][1]
+        assert "**Check passed:** ✅ Lint" in client.post_to_thread.call_args_list[1][0][1]
 
     def test_approval_promotes_when_checks_passed(self):
         """When approval received and checks already passed, promote to Ready to merge."""

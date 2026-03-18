@@ -338,11 +338,10 @@ class GitHubCheckSuitePassedMessage(BaseModel):
     url: str = ""
 
     def to_thread_content(self) -> str:
-        commit_link = gh_commit_link(self.repo, self.commit_sha)
-        lines = [f"**Status updated:** ✅ {self.check_name} passed — {commit_link}"]
+        lines = [f"**Check passed:** ✅ {self.check_name}"]
         if self.url:
             lines.append("")
-            lines.append(f"[View checks]({self.url})")
+            lines.append(f"[View run]({self.url})")
         return "\n".join(lines)
 
 

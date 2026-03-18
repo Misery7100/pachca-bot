@@ -115,7 +115,7 @@ GitHub will send a `ping` event to verify the webhook is working. You should see
 | `release` | `published` | Posts release notification with changelog |
 | `pull_request` | `opened`, `closed`, `reopened`, `ready_for_review`, `converted_to_draft`, `synchronize` | Creates/updates PR message with thread-based status tracking |
 | `pull_request_review` | `submitted`, `edited`, `dismissed` | Posts review (approved/changes requested/commented) to PR thread |
-| `check_suite` | `completed` (success) | Posts per-check "**Status updated:** ✅ {name} passed" to PR thread; promotes to "Ready to merge" only if approval exists |
+| `check_suite` | `completed` (success) | Posts "**Check passed:** ✅ {name}" with View run link to PR thread; promotes to "Ready to merge" only if approval exists |
 | `workflow_run` | `completed` (failure/cancelled) | Posts CI failure — to PR thread if associated, otherwise to channel |
 | `check_run` | `completed` (failure) | Posts individual check failure notification |
 | `deployment` | `created` | Posts deployment notification |
@@ -136,7 +136,7 @@ The bot tracks pull requests through their full lifecycle using **thread-based m
 
 **How it works:**
 1. When a new PR is created (draft or regular), the bot posts a parent message to the channel
-2. When each check suite passes, "**Status updated:** ✅ {check name} passed" is posted to the thread (one per workflow); parent stays "Ready for review" until an approval is received
+2. When each check suite passes, "**Check passed:** ✅ {check name}" with a View run link is posted to the thread (one per suite); parent stays "Ready for review" until an approval is received
 3. Reviews (approved, changes requested, commented, dismissed) are posted as thread replies; an approval promotes to "Ready to merge" when checks have passed
 4. On each subsequent status change, the bot:
    - Creates a thread on the parent message (if not already created)

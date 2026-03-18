@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- ...
+- **Check passed format** — Check suite success messages now use `**Check passed:** ✅ {name}` with a "View run" link instead of `**Status updated:** ✅ {name} passed — {commit}`
 
 ### Removed
 

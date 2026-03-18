@@ -203,7 +203,7 @@ class TestGitHubHandler:
         assert isinstance(result, dict)
         tracker._client.post_to_thread.assert_called_once()
         content = tracker._client.post_to_thread.call_args[0][1]
-        assert "passed" in content and "Status updated" in content
+        assert "Check passed" in content
 
     def test_pull_request_review_no_tracker_ignored(self):
         handler = _make_github_handler(pr_tracker=None)
