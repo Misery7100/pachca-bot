@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Check passed format** — Check suite success messages now use `**Check passed:** ✅ {name}` with a "View run" link instead of `**Status updated:** ✅ {name} passed — {commit}`
+- ...
 
 ### Removed
 
@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - ...
+
+## [0.1.8] - 2026-03-18
+
+### Changed
+
+- **Check passed format** — Check suite success messages now use `**Check passed:** ✅ {name}` with a "View run" link instead of `**Status updated:** ✅ {name} passed — {commit}`
 
 ## [0.1.7] - 2026-03-16
 
@@ -43,14 +49,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **check_suite behavior** — No longer promotes to "Ready to merge" on checks pass alone; posts "All checks passed" to thread instead. Promotes only when approval exists (or when approval arrives after checks pass)
-
-### Removed
-
-- ...
-
-### Fixed
-
-- ...
 
 ## [0.1.5] - 2026-03-16
 
