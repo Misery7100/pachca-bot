@@ -11,12 +11,13 @@ from fastapi import HTTPException, Request
 from pachca_bot.core.blocks import StructuredMessage
 from pachca_bot.integrations.github.models import (
     FieldsBlock,
-    GitHubCIMessage,
+    GitHubCheckSuiteTop,
     GitHubDeploymentMessage,
     GitHubPRMessage,
     GitHubPRReviewMessage,
     GitHubReleaseMessage,
     GitHubWebhookPayload,
+    GitHubWorkflowMessage,
     HeaderBlock,
     PRStatus,
     Severity,
@@ -52,23 +53,38 @@ def _resolve_pr_status(action: str, merged: bool, draft: bool) -> PRStatus | Non
     return PR_ACTIONS_TO_STATUS.get(action)
 
 
-def _try_post_ci_to_pr_thread(
+def _check_suite_pass_label(cs: GitHubCheckSuiteTop) -> str:
+    """Webhook payloads usually omit per-run names; prefer app name over the useless default 'Checks'."""
+    for run in cs.check_runs:
+        n = (run.name or "").strip()
+        if n and n.lower() != "checks":
+            return n
+    if cs.check_runs:
+        n = (cs.check_runs[0].name or "").strip()
+        if n and n.lower() != "checks":
+            return n
+    if cs.app and (cs.app.name or "").strip():
+        return cs.app.name.strip()
+    return ""
+
+
+def _try_post_workflow_failure_to_pr_thread(
     pr_tracker: PRTracker | None,
     repo: str,
     pr_numbers: list[int],
-    ci_msg: GitHubCIMessage,
+    workflow_msg: GitHubWorkflowMessage,
 ) -> bool:
-    """Post CI failure to PR thread(s). Downgrades status from Ready to merge if posted."""
+    """Post workflow/check failure to PR thread(s). Downgrades status from Ready to merge if posted."""
     if not pr_tracker or not pr_numbers:
         return False
     posted = False
     for pr_num in pr_numbers:
         thread_id = pr_tracker.get_thread_id_for_pr(repo, pr_num)
         if thread_id is not None:
-            ci_msg_for_thread = ci_msg.model_copy(update={"for_pr_thread": True})
+            msg_for_thread = workflow_msg.model_copy(update={"for_pr_thread": True})
             pr_tracker._client.post_to_thread(
                 thread_id,
-                ci_msg_for_thread.to_structured().render(),
+                msg_for_thread.to_structured().render(),
                 display_name=pr_tracker._integration.display_name,
                 display_avatar_url=pr_tracker._integration.display_avatar_url,
             )
@@ -157,17 +173,26 @@ class GitHubHandler:
                 return None
             if wr.conclusion in (None, "success", "neutral", "skipped"):
                 return None
-            ci_msg = GitHubCIMessage(
-                workflow_name=wr.name,
+            suite_id = wr.check_suite_id
+            if self.pr_tracker is not None and self.pr_tracker.should_skip_duplicate_workflow_failure(
+                repo, wr.head_sha, suite_id
+            ):
+                return {"id": None, "skipped_duplicate_ci": True}
+            workflow_msg = GitHubWorkflowMessage(
+                workflow_name=wr.name or "Workflow",
                 commit_sha=wr.head_sha,
                 repo=repo,
                 conclusion=wr.conclusion or "unknown",
                 url=wr.html_url,
             )
             pr_nums = [pr.number for pr in wr.pull_requests if pr.number]
-            if _try_post_ci_to_pr_thread(self.pr_tracker, repo, pr_nums, ci_msg):
+            if _try_post_workflow_failure_to_pr_thread(self.pr_tracker, repo, pr_nums, workflow_msg):
+                if self.pr_tracker is not None:
+                    self.pr_tracker.record_workflow_failure_posted(repo, wr.head_sha, suite_id)
                 return {"id": None, "posted_to_pr_thread": True}
-            return ci_msg.to_structured()
+            if self.pr_tracker is not None:
+                self.pr_tracker.record_workflow_failure_posted(repo, wr.head_sha, suite_id)
+            return workflow_msg.to_structured()
 
         if event_type == "check_run" and payload.check_run is not None:
             cr = payload.check_run
@@ -175,9 +200,15 @@ class GitHubHandler:
                 return None
             if cr.conclusion in (None, "success", "neutral", "skipped"):
                 return None
-            ci_msg = GitHubCIMessage(
-                workflow_name=cr.name,
-                commit_sha=cr.check_suite.head_sha,
+            suite_id = cr.check_suite.id
+            head_sha = cr.check_suite.head_sha
+            if self.pr_tracker is not None and self.pr_tracker.should_skip_duplicate_check_run_failure(
+                repo, head_sha, suite_id
+            ):
+                return {"id": None, "skipped_duplicate_ci": True}
+            workflow_msg = GitHubWorkflowMessage(
+                workflow_name=cr.name or "Check",
+                commit_sha=head_sha,
                 repo=repo,
                 conclusion=cr.conclusion or "unknown",
                 url=cr.html_url,
@@ -185,9 +216,13 @@ class GitHubHandler:
             pr_nums = []
             if payload.check_suite is not None:
                 pr_nums = [pr.number for pr in payload.check_suite.pull_requests if pr.number]
-            if _try_post_ci_to_pr_thread(self.pr_tracker, repo, pr_nums, ci_msg):
+            if _try_post_workflow_failure_to_pr_thread(self.pr_tracker, repo, pr_nums, workflow_msg):
+                if self.pr_tracker is not None:
+                    self.pr_tracker.record_check_run_failure_posted(repo, head_sha, suite_id)
                 return {"id": None, "posted_to_pr_thread": True}
-            return ci_msg.to_structured()
+            if self.pr_tracker is not None:
+                self.pr_tracker.record_check_run_failure_posted(repo, head_sha, suite_id)
+            return workflow_msg.to_structured()
 
         if (
             event_type == "pull_request_review"
@@ -248,9 +283,7 @@ class GitHubHandler:
                 return None
             if not cs.pull_requests or self.pr_tracker is None:
                 return None
-            check_name = "Checks"
-            if cs.check_runs:
-                check_name = cs.check_runs[0].name or check_name
+            check_name = _check_suite_pass_label(cs)
             result = None
             for pr_ref in cs.pull_requests:
                 result = self.pr_tracker.handle_check_suite_pass(
@@ -259,6 +292,7 @@ class GitHubHandler:
                     commit_sha=cs.head_sha,
                     check_name=check_name,
                     checks_url=cs.html_url or "",
+                    check_suite_id=cs.id,
                 )
             return result
 

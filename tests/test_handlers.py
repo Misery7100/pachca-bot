@@ -203,7 +203,95 @@ class TestGitHubHandler:
         assert isinstance(result, dict)
         tracker._client.post_to_thread.assert_called_once()
         content = tracker._client.post_to_thread.call_args[0][1]
-        assert "Check passed" in content
+        assert "All checks passed" in content
+
+    def test_workflow_run_skipped_when_check_run_already_posted_same_suite(self):
+        tracker = _make_mock_pr_tracker()
+        tracker._store[("org/repo", 3)] = _PREntry(
+            message_id=100,
+            status=PRStatus.READY_FOR_REVIEW,
+            content="",
+        )
+        handler = _make_github_handler(pr_tracker=tracker)
+        sha = "abc123deadbeef"
+        suite_id = 55_555
+        payload_cr = GitHubWebhookPayload.model_validate(
+            {
+                "action": "completed",
+                "repository": {"full_name": "org/repo"},
+                "check_run": {
+                    "name": "build",
+                    "conclusion": "failure",
+                    "html_url": "https://github.com/org/repo/check-runs/1",
+                    "check_suite": {"id": suite_id, "head_sha": sha},
+                },
+                "check_suite": {
+                    "pull_requests": [{"number": 3}],
+                },
+            }
+        )
+        r1 = handler._process("check_run", payload_cr)
+        assert r1 == {"id": None, "posted_to_pr_thread": True}
+        payload_wr = GitHubWebhookPayload.model_validate(
+            {
+                "action": "completed",
+                "repository": {"full_name": "org/repo"},
+                "workflow_run": {
+                    "name": "CI",
+                    "head_sha": sha,
+                    "conclusion": "failure",
+                    "html_url": "https://github.com/org/repo/actions/runs/99",
+                    "check_suite_id": suite_id,
+                    "pull_requests": [{"number": 3}],
+                },
+            }
+        )
+        r2 = handler._process("workflow_run", payload_wr)
+        assert r2 == {"id": None, "skipped_duplicate_ci": True}
+
+    def test_check_run_skipped_when_workflow_already_posted_same_suite(self):
+        tracker = _make_mock_pr_tracker()
+        tracker._store[("org/repo", 3)] = _PREntry(
+            message_id=100,
+            status=PRStatus.READY_FOR_REVIEW,
+            content="",
+        )
+        handler = _make_github_handler(pr_tracker=tracker)
+        sha = "deadbeef00"
+        suite_id = 66_666
+        payload_wr = GitHubWebhookPayload.model_validate(
+            {
+                "action": "completed",
+                "repository": {"full_name": "org/repo"},
+                "workflow_run": {
+                    "name": "CI",
+                    "head_sha": sha,
+                    "conclusion": "failure",
+                    "html_url": "https://github.com/org/repo/actions/runs/100",
+                    "check_suite_id": suite_id,
+                    "pull_requests": [{"number": 3}],
+                },
+            }
+        )
+        r1 = handler._process("workflow_run", payload_wr)
+        assert r1 == {"id": None, "posted_to_pr_thread": True}
+        payload_cr = GitHubWebhookPayload.model_validate(
+            {
+                "action": "completed",
+                "repository": {"full_name": "org/repo"},
+                "check_run": {
+                    "name": "build",
+                    "conclusion": "failure",
+                    "html_url": "https://github.com/org/repo/check-runs/2",
+                    "check_suite": {"id": suite_id, "head_sha": sha},
+                },
+                "check_suite": {
+                    "pull_requests": [{"number": 3}],
+                },
+            }
+        )
+        r2 = handler._process("check_run", payload_cr)
+        assert r2 == {"id": None, "skipped_duplicate_ci": True}
 
     def test_pull_request_review_no_tracker_ignored(self):
         handler = _make_github_handler(pr_tracker=None)

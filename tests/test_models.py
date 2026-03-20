@@ -9,11 +9,13 @@ from pachca_bot.integrations.generic.models import (
 )
 from pachca_bot.integrations.github.models import (
     GHDeployState,
-    GitHubCIMessage,
+    GitHubCheckSuitePassedMessage,
     GitHubDeploymentMessage,
     GitHubPRMessage,
     GitHubReleaseMessage,
+    GitHubWorkflowMessage,
     PRStatus,
+    check_pass_thread_marker,
 )
 
 
@@ -61,20 +63,23 @@ class TestReleaseMessage:
         assert "[View release](" in rendered
 
 
-class TestCIMessage:
+class TestWorkflowFailureMessage:
     def test_channel_has_repo(self):
-        m = GitHubCIMessage(
-            workflow_name="CI",
+        m = GitHubWorkflowMessage(
+            workflow_name="Deploy to prod",
             commit_sha="abc12345678",
             repo="org/repo",
             conclusion="failure",
             url="https://github.com/org/repo/actions/runs/1",
         )
-        assert "[org/repo](" in m.to_structured().render()
+        rendered = m.to_structured().render()
+        assert "[org/repo](" in rendered
+        assert "Deploy to prod" in rendered
+        assert "CI:" not in rendered
 
     def test_pr_thread_no_repo(self):
-        m = GitHubCIMessage(
-            workflow_name="CI",
+        m = GitHubWorkflowMessage(
+            workflow_name="Lint",
             commit_sha="abc12345678",
             repo="org/repo",
             conclusion="failure",
@@ -82,6 +87,35 @@ class TestCIMessage:
             for_pr_thread=True,
         )
         assert "[org/repo](" not in m.to_structured().render()
+
+
+class TestCheckSuitePassedMessage:
+    def test_generic_name_uses_all_checks_copy(self):
+        m = GitHubCheckSuitePassedMessage(
+            repo="org/repo", commit_sha="abc", check_name="", url="https://ex/checks"
+        )
+        text = m.to_thread_content()
+        assert "**All checks passed:** ✅" in text
+        assert "✅ Checks" not in text
+
+    def test_named_check(self):
+        m = GitHubCheckSuitePassedMessage(
+            repo="org/repo", commit_sha="abc", check_name="my-workflow", url=""
+        )
+        assert "**Check passed:** ✅ my-workflow" in m.to_thread_content()
+
+    def test_literal_checks_label_treated_as_generic(self):
+        m = GitHubCheckSuitePassedMessage(repo="org/repo", commit_sha="abc", check_name="Checks")
+        text = m.to_thread_content()
+        assert "**All checks passed:** ✅" in text
+        assert "<!-- pachca-bot:chk:" in text
+
+    def test_check_pass_marker_stable(self):
+        m1 = check_pass_thread_marker("sha", 1, "n")
+        m2 = check_pass_thread_marker("sha", 1, "n")
+        m3 = check_pass_thread_marker("sha", 2, "n")
+        assert m1 == m2
+        assert m1 != m3
 
 
 class TestPRMessage:

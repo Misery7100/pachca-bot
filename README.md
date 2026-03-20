@@ -115,11 +115,23 @@ GitHub will send a `ping` event to verify the webhook is working. You should see
 | `release` | `published` | Posts release notification with changelog |
 | `pull_request` | `opened`, `closed`, `reopened`, `ready_for_review`, `converted_to_draft`, `synchronize` | Creates/updates PR message with thread-based status tracking |
 | `pull_request_review` | `submitted`, `edited`, `dismissed` | Posts review (approved/changes requested/commented) to PR thread |
-| `check_suite` | `completed` (success) | Posts "**Check passed:** ✅ {name}" with View run link to PR thread; promotes to "Ready to merge" only if approval exists |
-| `workflow_run` | `completed` (failure/cancelled) | Posts CI failure — to PR thread if associated, otherwise to channel |
-| `check_run` | `completed` (failure) | Posts individual check failure notification |
+| `check_suite` | `completed` (success) | Posts **All checks passed** or **Check passed:** ✅ {name} (from run or app) with View run link to PR thread; promotes to "Ready to merge" only if approval exists |
+| `workflow_run` | `completed` (failure/cancelled) | Posts workflow failure (`{workflow} — {conclusion}`) to PR thread if associated, otherwise to channel |
+| `check_run` | `completed` (failure) | Posts check failure the same way; skipped if a `workflow_run` for the same `check_suite_id` was already posted on the **same process** (and vice versa) |
 | `deployment` | `created` | Posts deployment notification |
 | `deployment_status` | `created` | Posts deployment status update |
+
+### Serverless / multi-instance (GitHub PR tracker)
+
+By default the PR tracker keeps a small **in-memory** cache (message ids, dedupe keys). That is lost on cold starts and is not shared across replicas, so Lambda, Cloud Run, or horizontally scaled pods can see **wrong or duplicate behavior**.
+
+Set **`GITHUB__PR_TRACKER_STATELESS_SAFE=true`** to make PR tracking **stateless-safe**:
+
+- Each webhook **reloads** the PR parent from chat and **reads the Pachca thread** to infer whether checks already passed and whether an approval line exists (`**Review submitted:** ✅ Approved`).
+- **Check-pass** thread lines end with an HTML comment `<!-- pachca-bot:chk:… -->` so repeat `check_suite` deliveries can be deduped without RAM. That form is *usually* invisible in Markdown/HTML clients, but **Pachca does not guarantee** it—send a test message and check web, mobile, and any notification previews. If your client shows raw HTML, say so (or avoid stateless mode) until we add a different encoding.
+- **In-memory workflow vs check_run failure dedupe** is **disabled** in this mode (no shared store across instances), so the same failing suite might produce two notifications if GitHub delivers both events to different workers.
+
+Fully **stateless** operation (no Pachca reads) is not possible if you want parent updates and thread dedupe; the mode above uses the messenger as the source of truth instead of process memory.
 
 ### PR Lifecycle
 
@@ -136,7 +148,7 @@ The bot tracks pull requests through their full lifecycle using **thread-based m
 
 **How it works:**
 1. When a new PR is created (draft or regular), the bot posts a parent message to the channel
-2. When each check suite passes, "**Check passed:** ✅ {check name}" with a View run link is posted to the thread (one per suite); parent stays "Ready for review" until an approval is received
+2. When each check suite completes successfully, a pass line is posted to the thread (deduped by check suite id): either **All checks passed** or a named **Check passed:** line, plus a View run link; parent stays "Ready for review" until an approval is received
 3. Reviews (approved, changes requested, commented, dismissed) are posted as thread replies; an approval promotes to "Ready to merge" when checks have passed
 4. On each subsequent status change, the bot:
    - Creates a thread on the parent message (if not already created)

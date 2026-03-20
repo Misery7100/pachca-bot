@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from enum import Enum
 from typing import Any
@@ -167,11 +168,13 @@ class GitHubWorkflowRun(BaseModel, extra="allow"):
     head_sha: str = ""
     conclusion: str | None = None
     html_url: str = ""
+    check_suite_id: int | None = None
     actor: GitHubUser = Field(default_factory=GitHubUser)
     pull_requests: list[GitHubWorkflowPR] = Field(default_factory=list)
 
 
 class GitHubCheckSuite(BaseModel, extra="allow"):
+    id: int | None = None
     conclusion: str | None = None
     head_branch: str = ""
     head_sha: str = ""
@@ -224,13 +227,21 @@ class GitHubCheckRunBasic(BaseModel, extra="allow"):
     name: str = ""
 
 
+class GitHubCheckSuiteApp(BaseModel, extra="allow"):
+    """GitHub App on a check suite (webhook includes `app` for app-triggered suites)."""
+
+    name: str = ""
+    slug: str = ""
+
+
 class GitHubCheckSuiteTop(BaseModel, extra="allow"):
-    id: int = 0
+    id: int | None = None
     head_branch: str = ""
     head_sha: str = ""
     status: str = ""
     conclusion: str | None = None
     html_url: str = ""
+    app: GitHubCheckSuiteApp | None = None
     pull_requests: list[GitHubCheckSuitePR] = Field(default_factory=list)
     check_runs: list[GitHubCheckRunBasic] = Field(default_factory=list)
 
@@ -306,7 +317,12 @@ class GitHubReleaseMessage(BaseModel):
         return msg
 
 
-class GitHubCIMessage(BaseModel):
+class GitHubWorkflowMessage(BaseModel):
+    """Failed or cancelled workflow run / check run.
+
+    Header uses the workflow or check name only (no fixed "CI" prefix).
+    """
+
     workflow_name: str
     commit_sha: str
     repo: str
@@ -316,7 +332,7 @@ class GitHubCIMessage(BaseModel):
 
     def to_structured(self) -> StructuredMessage:
         severity = Severity.ERROR if self.conclusion == "failure" else Severity.WARNING
-        header = f"{severity.emoji} CI: {self.workflow_name} — {self.conclusion}"
+        header = f"{severity.emoji} {self.workflow_name} — {self.conclusion}"
         msg = StructuredMessage()
         msg.add(HeaderBlock(text=header, level=2))
         fields: dict[str, str] = {}
@@ -329,19 +345,40 @@ class GitHubCIMessage(BaseModel):
         return msg
 
 
+def check_pass_thread_marker(
+    commit_sha: str, check_suite_id: int | None, check_name: str
+) -> str:
+    """HTML comment suffix for thread scans (serverless dedupe).
+
+    Many Markdown renderers omit ``<!-- ... -->`` in the UI, but Pachca does not
+    document this—verify in the clients you use (web, mobile, notifications).
+    """
+    payload = f"{commit_sha}\0{check_suite_id}\0{check_name}".encode()
+    digest = hashlib.blake2b(payload, digest_size=8).hexdigest()
+    return f"<!-- pachca-bot:chk:{digest} -->"
+
+
 class GitHubCheckSuitePassedMessage(BaseModel):
     """Message for check_suite success posted to PR thread."""
 
     repo: str
     commit_sha: str
-    check_name: str = "Checks"
+    check_name: str = ""
     url: str = ""
+    check_suite_id: int | None = None
 
     def to_thread_content(self) -> str:
-        lines = [f"**Check passed:** ✅ {self.check_name}"]
+        name = (self.check_name or "").strip()
+        if not name or name.lower() == "checks":
+            lines = ["**All checks passed:** ✅"]
+        else:
+            lines = [f"**Check passed:** ✅ {name}"]
         if self.url:
             lines.append("")
             lines.append(f"[View run]({self.url})")
+        lines.append(
+            check_pass_thread_marker(self.commit_sha, self.check_suite_id, name)
+        )
         return "\n".join(lines)
 
 

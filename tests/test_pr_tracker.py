@@ -12,15 +12,25 @@ _GH_INTEGRATION = IntegrationConfig(
     display_avatar_url="https://example.com/gh.png",
 )
 
+_GH_STATELESS = IntegrationConfig(
+    chat_id=12345,
+    display_name="GitHub Bot",
+    display_avatar_url="https://example.com/gh.png",
+    pr_tracker_stateless_safe=True,
+)
 
-def _make_tracker() -> tuple[PRTracker, MagicMock]:
+
+def _make_tracker(
+    integration: IntegrationConfig = _GH_INTEGRATION,
+) -> tuple[PRTracker, MagicMock]:
     client = MagicMock()
     client.send_message.return_value = {"id": 100}
     client.get_messages.return_value = []
     client.create_thread.return_value = {"id": 200}
+    client.get_thread_chat_id.return_value = 303
     client.post_to_thread.return_value = {"id": 201}
     client.update_message.return_value = {"id": 100}
-    return PRTracker(client, _GH_INTEGRATION), client
+    return PRTracker(client, integration), client
 
 
 def _make_pr(number: int = 1, status: PRStatus = PRStatus.OPEN) -> GitHubPRMessage:
@@ -149,7 +159,7 @@ class TestPRTrackerCIFailure:
         )
         assert result == {"id": 100}
         client.post_to_thread.assert_called_once()
-        assert "Check passed" in client.post_to_thread.call_args[0][1]
+        assert "All checks passed" in client.post_to_thread.call_args[0][1]
         client.update_message.assert_not_called()
 
     def test_check_suite_pass_promotes_when_has_approval(self):
@@ -169,8 +179,8 @@ class TestPRTrackerCIFailure:
         client.update_message.assert_called_once()
         assert "Ready to merge" in client.update_message.call_args[0][1]
 
-    def test_check_suite_pass_dedupes_same_commit_and_name(self):
-        """Multiple check_suite events for same commit+check_name post only once."""
+    def test_check_suite_pass_dedupes_same_commit_and_suite_id(self):
+        """Multiple check_suite events for same commit+suite id post only once."""
         tracker, client = _make_tracker()
         content = _make_pr(status=PRStatus.READY_FOR_REVIEW).to_parent()
         tracker._store[("org/repo", 1)] = _PREntry(
@@ -178,12 +188,16 @@ class TestPRTrackerCIFailure:
         )
         for _ in range(3):
             tracker.handle_check_suite_pass(
-                repo="org/repo", number=1, commit_sha="abc123", check_name="CI"
+                repo="org/repo",
+                number=1,
+                commit_sha="abc123",
+                check_name="CI",
+                check_suite_id=777,
             )
         assert client.post_to_thread.call_count == 1
 
     def test_check_suite_pass_posts_per_check_name(self):
-        """Different check names post separate messages."""
+        """Different check names post separate messages (no suite id)."""
         tracker, client = _make_tracker()
         content = _make_pr(status=PRStatus.READY_FOR_REVIEW).to_parent()
         tracker._store[("org/repo", 1)] = _PREntry(
@@ -198,6 +212,47 @@ class TestPRTrackerCIFailure:
         assert client.post_to_thread.call_count == 2
         assert "**Check passed:** ✅ CI" in client.post_to_thread.call_args_list[0][0][1]
         assert "**Check passed:** ✅ Lint" in client.post_to_thread.call_args_list[1][0][1]
+
+    def test_stateless_dedupes_check_pass_via_thread_marker(self):
+        """Second identical check_suite pass does not post when marker exists in thread."""
+        client = MagicMock()
+        client.send_message.return_value = {"id": 100}
+        client.create_thread.return_value = {"id": 200}
+        client.get_thread_chat_id.return_value = 303
+        client.update_message.return_value = {"id": 100}
+        parent = _make_pr(status=PRStatus.READY_FOR_REVIEW).to_parent()
+        thread_msgs: list[dict] = []
+
+        def get_messages(chat_id: int, max_messages=None):
+            if chat_id == 12345:
+                return [{"id": 100, "content": parent}]
+            if chat_id == 303:
+                return thread_msgs
+            return []
+
+        def post_thread(_tid, content, **_kw):
+            thread_msgs.append({"content": content})
+            return {"id": 400 + len(thread_msgs)}
+
+        client.get_messages.side_effect = get_messages
+        client.post_to_thread.side_effect = post_thread
+
+        tracker = PRTracker(client, _GH_STATELESS)
+        tracker.handle_check_suite_pass(
+            repo="org/repo",
+            number=1,
+            commit_sha="abc123",
+            check_name="CI",
+            check_suite_id=42,
+        )
+        tracker.handle_check_suite_pass(
+            repo="org/repo",
+            number=1,
+            commit_sha="abc123",
+            check_name="CI",
+            check_suite_id=42,
+        )
+        assert client.post_to_thread.call_count == 1
 
     def test_approval_promotes_when_checks_passed(self):
         """When approval received and checks already passed, promote to Ready to merge."""

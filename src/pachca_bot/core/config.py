@@ -50,6 +50,13 @@ class GitHubIntegrationSettings(IntegrationSettings):
     chat_id: int | None = Field(default=None, validation_alias="pachca_chat_id")
     bot_display_name: str = DEFAULT_GITHUB_BOT_NAME
     display_avatar_url: str | None = DEFAULT_GITHUB_AVATAR
+    pr_tracker_stateless_safe: bool = Field(
+        default=False,
+        description=(
+            "Reload PR state from Pachca on each webhook; dedupe check-pass via thread "
+            "markers. Use for serverless / multi-instance (env: GITHUB__PR_TRACKER_STATELESS_SAFE)"
+        ),
+    )
 
     model_config = {"case_sensitive": False, "extra": "ignore", "populate_by_name": True}
 
@@ -69,6 +76,7 @@ class IntegrationConfig:
     chat_id: int
     display_name: str
     display_avatar_url: str
+    pr_tracker_stateless_safe: bool = False
 
 
 class Settings(BaseSettings):
@@ -114,6 +122,7 @@ class Settings(BaseSettings):
             chat_id=chat_id,
             display_name=self.github.bot_display_name or DEFAULT_GITHUB_BOT_NAME,
             display_avatar_url=self.github.display_avatar_url or DEFAULT_GITHUB_AVATAR,
+            pr_tracker_stateless_safe=self.github.pr_tracker_stateless_safe,
         )
 
     def get_generic_config(self) -> IntegrationConfig | None:

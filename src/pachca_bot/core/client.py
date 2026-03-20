@@ -111,6 +111,26 @@ class PachcaClient:
 
         return _retry_with_backoff(_create)
 
+    def get_thread_chat_id(self, thread_id: int) -> int | None:
+        """Return the thread's chat id for listing thread messages (GET /messages?chat_id=...)."""
+
+        def _fetch():
+            client = self._ensure_client()
+            path = f"{Pachca.THREADS}/{thread_id}"
+            response = client.call_api(path, "get", {})
+            data = response.get("data")
+            if isinstance(data, dict):
+                raw = data.get("chat_id")
+                if raw is not None:
+                    return int(raw)
+            return None
+
+        try:
+            return _retry_with_backoff(_fetch)
+        except Exception:
+            logger.warning("Failed to fetch thread %s", thread_id, exc_info=True)
+            return None
+
     def post_to_thread(
         self,
         thread_id: int,
