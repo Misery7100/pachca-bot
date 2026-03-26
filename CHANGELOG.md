@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ...
+
+### Changed
+
+- ...
+
+### Fixed
+
+- ...
+
+### Removed
+
+- ...
+
+## [0.1.9] - 2026-03-26
+
+### Added
+
 - **Workflow vs check-run dedupe** — Failed `workflow_run` and `check_run` notifications share the same `check_suite_id` when GitHub sends it; only the first delivered event for a given repo + commit + suite is posted.
 - **`GITHUB__PR_TRACKER_STATELESS_SAFE`** — Optional GitHub integration flag: reload PR state from Pachca on each webhook, infer checks/approval from thread text, and dedupe check-pass posts using an HTML comment suffix (often invisible; verify in your Pachca clients). In-memory workflow/check_run failure dedupe is off in this mode.
 
